@@ -79,7 +79,7 @@ findSymbolIndex()
 	local count=`grep " $symbol$" "$mapfile" | wc -l`
 	[[ $count == "1" ]] &&  return
 	logInfo "Found $count occurrences of the symbol '$symbol'"
-	local maches=`grep -A 1 -B 1 " $symbol$" "$mapfile" | cut -d " " -f 3`
+	local maches=`grep -A 5 -B 5 " $symbol$" "$mapfile" | cut -d " " -f 3`
 	index=1
 	local occure=0
 	while read -r sym; do
