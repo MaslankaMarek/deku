@@ -7,12 +7,11 @@ kerndir=`find /build/$CROS_BOARD/var/db/pkg/sys-kernel/ -type f -name "chromeos-
 kerndir=`basename $kerndir`
 kerndir=${kerndir%-9999*}
 
-afdo=`grep AFDO_PROFILE_VERSION= /build/$CROS_BOARD/var/db/pkg/sys-kernel/$kerndir-9999/$kerndir-9999.ebuild`
-afdo=${afdo#*=\"}
-afdo=${afdo%\"}
+afdo=`sed -nr 's/^(\w+\s)?AFDO_PROFILE_VERSION="(.*)"/\2/p' /build/$CROS_BOARD/var/db/pkg/sys-kernel/$kerndir-9999/$kerndir-9999.ebuild`
 if [[ $afdo != "" ]]; then
     afdofile=$kerndir-$afdo.gcov
     afdopath=/var/cache/chromeos-cache/distfiles/$afdofile.xz
+    [[ ! -f $afdopath ]] && afdopath=/build/$CROS_BOARD/tmp/portage/sys-kernel/$kerndir-9999/distdir/$afdofile.xz
     dstdir=/build/$CROS_BOARD/tmp/portage/sys-kernel/$kerndir-9999/work
     mkdir -p $dstdir
     if [[ -f $afdopath ]]; then
@@ -24,8 +23,9 @@ if [[ $afdo != "" ]]; then
             -output="$dstdir/$afdofile.compbinary.afdo" \
             "$dstdir/$afdofile"
     else
-        logInfo "Can't find afdo profile file ($afdopath)"
+        logErr "Can't find afdo profile file ($afdopath)"
+        exit 1
     fi
 else
-    logInfo "Can't find afdo profile version"
+    logInfo "Can't find afdo profile file"
 fi
