@@ -181,8 +181,9 @@ generateDiffObject()
 	local newfun=`sed -n "s/^New function: \(.\+\)/\1/p" <<< "$out"`
 	local modfun=()
 
-	while read -r fun;
+	while read -r fun
 	do
+		[[ $fun == "" ]] && continue
 		local initfunc=`objdump -t -j ".init.text" "$moduledir/_$filename.o" 2>/dev/null | grep "\b$fun\b"`
 		if [[ "$initfunc" != "" ]]; then
 			logInfo "Detect modifications in the init '$fun' function. Changes from this function won't be applied."

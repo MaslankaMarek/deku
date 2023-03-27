@@ -476,7 +476,7 @@ char *disassembleBytes(uint8_t *inputBuf, size_t inputBufSize, DisasmData *data)
 static uint32_t calcSymHash(Elf *elf, const GElf_Sym *sym)
 {
 	Elf_Scn *scn = elf_getscn(elf, sym->st_shndx);
-	Elf_Data *data = elf_getdata(scn, NULL);
+	Elf_Data *data = elf_rawdata(scn, NULL);
 	uint32_t crc = crc32((uint8_t *)data->d_buf + sym->st_value, sym->st_size);
 
 	GElf_Rela rela;
@@ -501,17 +501,40 @@ static uint32_t calcSymHash(Elf *elf, const GElf_Sym *sym)
 			if(invalidSym(rsym))
 				LOG_ERR("Can't find symbol at index: %ld", ELF64_R_SYM(rela.r_info));
 			int secIndex = rsym.st_shndx;
+			const char *name = NULL;
 			if(rsym.st_name == 0)
-				rsym = getLinkedSym(elf, &rsym);
-			if(invalidSym(rsym))
 			{
-				Elf_Scn *scn = elf_getscn(elf, secIndex);
-				Elf_Data *data = elf_getdata(scn, NULL);
-				crc += crc32((uint8_t *)data->d_buf + data->d_off, data->d_size);
+				if (rsym.st_info == STT_SECTION)
+				{
+					name = getSectionName(elf, secIndex);
+				}
+				else
+				{
+					rsym = getLinkedSym(elf, &rsym);
+					if(invalidSym(rsym))
+						LOG_ERR("Can't find symbol at index: %ld", ELF64_R_SYM(rela.r_info));
+					name = elf_strptr(elf, symtabLink, rsym.st_name);
+				}
 			}
 			else
 			{
-				const char *name = elf_strptr(elf, symtabLink, rsym.st_name);
+				name = elf_strptr(elf, symtabLink, rsym.st_name);
+			}
+			if (name)
+			{
+				if (strstr(name, ".str.") || strstr(name, ".str1.") || strstr(name, ".rodata.str") == name)
+				{
+					Elf_Scn *scn = elf_getscn(elf, secIndex);
+					Elf_Data *data = elf_getdata(scn, NULL);
+					GElf_Shdr shdr;
+					gelf_getshdr(scn, &shdr);
+					if ((Elf64_Sxword)shdr.sh_size > rela.r_addend)
+						name = (char *)data->d_buf + rela.r_addend;
+				}
+				if (strstr(name, ".text.unlikely.") == name)
+					name += strlen(".text.unlikely.");
+				else if (strstr(name, ".text.") == name)
+					name += strlen(".text.");
 				crc += crc32((uint8_t *)name, strlen(name));
 			}
 		}
@@ -521,8 +544,8 @@ static uint32_t calcSymHash(Elf *elf, const GElf_Sym *sym)
 
 static bool equalFunctions(Elf *elf, Elf *secondElf, const char *funName)
 {
-	SymbolData symData1 = getSymbolData(elf, funName, STT_FUNC, true);
-	SymbolData symData2 = getSymbolData(secondElf, funName, STT_FUNC, true);
+	SymbolData symData1 = getSymbolData(elf, funName, STT_FUNC, false);
+	SymbolData symData2 = getSymbolData(secondElf, funName, STT_FUNC, false);
 
 	if (symData1.size != symData2.size)
 		return false;
