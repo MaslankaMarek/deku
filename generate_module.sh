@@ -171,6 +171,24 @@ buildLivepatchModule()
 	buildModules "$moduledir"
 }
 
+function isTraceable()
+{
+	local file=$1
+	local symbol=$2
+
+	local val=`readelf -sW "$file" | \
+			   grep FUNC | \
+			   grep " $symbol$" | \
+			   cut -d':' -f 2 | \
+			   xargs | \
+			   cut -d' ' -f 1`
+	[[ $val == "" ]] && return 0
+	val="0x$val"
+	fentryoff=`printf "000000%x" $(($val + 1))`
+	fentry=`readelf -rW "$file" | grep __fentry__`
+	grep -q $fentryoff <<< $fentry && return 0 || return 1
+}
+
 generateDiffObject()
 {
 	local moduledir=$1
@@ -188,6 +206,10 @@ generateDiffObject()
 		if [[ "$initfunc" != "" ]]; then
 			logInfo "Detect modifications in the init '$fun' function. Changes from this function won't be applied."
 			continue
+		fi
+		if ! isTraceable "$BUILD_DIR/${file%.*}.o" $fun; then
+			logErr "Can't apply changes to the '$file' because the '$fun' function is forbidden to modify."
+			exit 1
 		fi
 		modfun+=("$fun")
 	done <<< "$tmpmodfun"
