@@ -64,6 +64,8 @@ typedef struct
 	bool isVar;
 	size_t linkedSymbol;
 	size_t copiedIndex;
+	bool fullCopied;
+	size_t st_value;
 	unsigned char st_info;
 	size_t *callees;
 } Symbol;
@@ -195,6 +197,7 @@ static Symbol **readSymbols(Elf *elf)
 				syms[i]->isVar = true;
 		}
 		syms[i]->st_info = sym.st_info;
+		syms[i]->st_value = sym.st_value;
 		syms[i]->index = SymbolsCount++;
 	}
 	return syms;
@@ -273,14 +276,27 @@ static uint16_t getSymbolIndexByName(Elf *elf, const char *symName)
 	return 0;
 }
 
-static size_t getLinkedFuncSymbol(Symbol *symbol)
+static Symbol *getSymbolForRelocation(const GElf_Rela rela)
 {
+	size_t symIndex = ELF64_R_SYM(rela.r_info);
+	if (Symbols[symIndex]->secIndex == 0)
+		return Symbols[symIndex];
+	size_t secIndex = Symbols[symIndex]->secIndex;
+	Elf64_Sxword addend = rela.r_addend;
+	switch (ELF64_R_TYPE(rela.r_info))
+	{
+	case R_386_PC32:
+	case R_X86_64_PLT32:
+		addend += 4;
+		break;
+	}
+
 	for (Symbol **s = Symbols; *s != NULL; s++)
 	{
-		if (s[0] != symbol && s[0]->secIndex == symbol->secIndex && s[0]->isFun)
-			return s - Symbols;
+		if (s[0]->secIndex == secIndex && s[0]->st_value == (size_t)addend)
+			return s[0];
 	}
-	return -1;
+	return Symbols[symIndex];
 }
 
 static size_t getLinkedSymbol(Symbol *symbol)
@@ -815,16 +831,30 @@ static size_t copySymbol(Elf *elf, Elf *outElf, size_t index, bool fullCopy)
 {
 	GElf_Sym oldSym;
 	GElf_Shdr shdr;
-
-	size_t linkIndex = getLinkedSymbol(Symbols[index]);
-	if (Symbols[index]->name == NULL && linkIndex != (size_t)-1)
-		index = linkIndex;
+	Elf_Scn *scn;
+	Elf_Data *data;
+	GElf_Sym newSym;
 
 	if (Symbols[index]->copiedIndex)
-		return Symbols[index]->copiedIndex;
+	{
+		if (fullCopy && !Symbols[index]->fullCopied)
+		{
+			// make a deep copy of the symbol if the previous one was just a
+			// shallow copy
+			scn = getSectionByName(outElf, ".symtab");
+			data = elf_getdata(scn, NULL);
+			gelf_getsym(data, Symbols[index]->copiedIndex, &newSym);
 
-	Elf_Scn *scn = getSectionByName(elf, ".symtab");
-	Elf_Data *data = elf_getdata(scn, NULL);
+			scn = copySection(elf, outElf, Symbols[index]->secIndex, true);
+			newSym.st_shndx = elf_ndxscn(scn);
+			gelf_update_sym(data, Symbols[index]->copiedIndex, &newSym);
+			Symbols[index]->fullCopied = true;
+		}
+		return Symbols[index]->copiedIndex;
+	}
+
+	scn = getSectionByName(elf, ".symtab");
+	data = elf_getdata(scn, NULL);
 	gelf_getshdr(scn, &shdr);
 	gelf_getsym(data, index, &oldSym);
 	scn = getSectionByName(outElf, ".symtab");
@@ -833,11 +863,11 @@ static size_t copySymbol(Elf *elf, Elf *outElf, size_t index, bool fullCopy)
 	data = elf_getdata(scn, NULL);
 	data->d_buf = realloc(data->d_buf, data->d_size + sizeof(GElf_Sym));
 	CHECK_ALLOC(data->d_buf);
-	GElf_Sym newSym = oldSym;
+	newSym = oldSym;
 
 	char symType = ELF64_ST_TYPE(oldSym.st_info);
 	if (oldSym.st_shndx > 0 && oldSym.st_shndx < SectionsCount &&
-		(fullCopy || (symType != STT_FUNC && symType != STT_OBJECT)))
+		(fullCopy || (!Symbols[index]->isFun && !Symbols[index]->isVar)))
 	{
 		Elf_Scn *scn = copySection(elf, outElf, oldSym.st_shndx, true);
 		newSym.st_shndx = elf_ndxscn(scn);
@@ -862,6 +892,7 @@ static size_t copySymbol(Elf *elf, Elf *outElf, size_t index, bool fullCopy)
 				newSym.st_name = appendStringToScn(outElf, ".strtab", Symbols[index]->name);
 			}
 		}
+		Symbols[index]->fullCopied = true;
 	}
 	else // mark symbol as "external"
 	{
@@ -871,6 +902,7 @@ static size_t copySymbol(Elf *elf, Elf *outElf, size_t index, bool fullCopy)
 		newSym.st_info = ELF64_ST_INFO(STB_GLOBAL, symType);
 		if (oldSym.st_name != 0)
 			newSym.st_name = copyStrtabItem(elf, outElf, oldSym.st_name);
+		Symbols[index]->fullCopied = false;
 	}
 
 	memcpy((uint8_t *)data->d_buf + data->d_size, &newSym, sizeof(GElf_Sym));
@@ -882,7 +914,7 @@ static size_t copySymbol(Elf *elf, Elf *outElf, size_t index, bool fullCopy)
 	return newIndex;
 }
 
-static void copyRelSection(Elf *elf, Elf *outElf, Elf64_Section index, size_t relTo, GElf_Sym *fromSym, bool fullCopy)
+static void copyRelSection(Elf *elf, Elf *outElf, Elf64_Section index, size_t relTo, GElf_Sym *fromSym, char **skipSymbols, bool fullCopy)
 {
 	Elf_Scn *outScn = copySection(elf, outElf, index, false);
 	GElf_Shdr shdr;
@@ -914,7 +946,19 @@ static void copyRelSection(Elf *elf, Elf *outElf, Elf64_Section index, size_t re
 			if (idx != -1 && (Symbols[idx]->isFun || Symbols[idx]->isVar))
 				symIndex = idx;
 		}
-		size_t newSymIndex = copySymbol(elf, outElf, symIndex, fullCopy);
+		Symbol *sym = getSymbolForRelocation(rela);
+		bool allowCopy = true;
+		char **syms = skipSymbols;
+		while(*syms != NULL)
+		{
+			if (strcmp(*syms, sym->name) == 0) {
+				allowCopy = false;
+				break;
+			}
+			syms++;
+		}
+
+		size_t newSymIndex = copySymbol(elf, outElf, symIndex, fullCopy && allowCopy);
 		rela.r_info = ELF64_R_INFO(newSymIndex, ELF64_R_TYPE(rela.r_info));
 		gelf_update_rela(outData, j, &rela);
 		j++;
@@ -926,15 +970,15 @@ static void copyRelSection(Elf *elf, Elf *outElf, Elf64_Section index, size_t re
 		LOG_ERR("gelf_update_shdr failed");
 }
 
-static void copySectionWithRel(Elf *elf, Elf *outElf, Elf64_Section index, GElf_Sym *fromSym, bool fullCopy)
+static void copySectionWithRel(Elf *elf, Elf *outElf, Elf64_Section index, GElf_Sym *fromSym, char **skipSymbols, bool fullCopy)
 {
 	Elf_Scn *newScn = copySection(elf, outElf, index, true);
 	Elf_Scn *relScn = getRelForSectionIndex(elf, index);
 	if (relScn)
-		copyRelSection(elf, outElf, elf_ndxscn(relScn), elf_ndxscn(newScn), fromSym, fullCopy);
+		copyRelSection(elf, outElf, elf_ndxscn(relScn), elf_ndxscn(newScn), fromSym, skipSymbols, fullCopy);
 }
 
-static void copySymbols(Elf *elf, Elf *outElf, char **symbols)
+static void copySymbols(Elf *elf, Elf *outElf, char **symbols, char **skipSymbols)
 {
 	GElf_Shdr shdr;
 	GElf_Sym sym;
@@ -959,7 +1003,7 @@ static void copySymbols(Elf *elf, Elf *outElf, char **symbols)
 	while(*syms != NULL)
 	{
 		sym = getSymbolByName(elf, *syms, &symIndex);
-		copySectionWithRel(elf, outElf, sym.st_shndx, &sym, false);
+		copySectionWithRel(elf, outElf, sym.st_shndx, &sym, skipSymbols, false);
 		syms++;
 	}
 	// needed for BUG()
@@ -967,7 +1011,7 @@ static void copySymbols(Elf *elf, Elf *outElf, char **symbols)
 	if (scn)
 	{
 		size_t index = elf_ndxscn(scn);
-		copySectionWithRel(elf, outElf, index, NULL, true);
+		copySectionWithRel(elf, outElf, index, NULL, skipSymbols, true);
 	}
 	// TODO: Fix file path in string sections
 
@@ -1014,24 +1058,19 @@ static void symbolCallees(Elf *elf, Symbol *s, size_t *result)
 		size_t symIndex = ELF64_R_SYM(rela.r_info);
 		if (symIndex >= SymbolsCount)
 			LOG_ERR("Invalid symbol index: %ld in section relocation %ld", symIndex, elf_ndxscn(scn));
-		if (Symbols[symIndex]->st_info == STT_SECTION)
-		{
-			size_t linkIndex = getLinkedFuncSymbol(Symbols[symIndex]);
-			if (linkIndex != (size_t)-1)
-				symIndex = linkIndex;
-		}
-		if (Symbols[symIndex]->isFun)
+		Symbol *sym = getSymbolForRelocation(rela);
+		if (sym->isFun)
 		{
 			size_t *r = result;
 			// add symIndex to result if result not contains it
 			while (*r != 0)
 			{
-				if (*r == symIndex)
+				if (*r == sym->index)
 					break;
 				r++;
 			}
 			if (*r == 0)
-				*r = symIndex;
+				*r = sym->index;
 		}
 	}
 }
@@ -1154,9 +1193,11 @@ static void extractSymbols(int argc, char *argv[])
 	char *outFile = NULL;
 	char **symToCopy = calloc(argc, sizeof(char *));
 	CHECK_ALLOC(symToCopy);
+	char **skipSymToCopy = calloc(argc, sizeof(char *));
+	CHECK_ALLOC(skipSymToCopy);
 	char **syms;
 	int opt;
-	while ((opt = getopt(argc, argv, "f:o:s:")) != -1)
+	while ((opt = getopt(argc, argv, "f:o:s:n:")) != -1)
 	{
 		switch (opt)
 		{
@@ -1177,12 +1218,33 @@ static void extractSymbols(int argc, char *argv[])
 			if (*syms == NULL)
 				*syms = strdup(optarg);
 			break;
+		case 'n':
+			syms = symToCopy;
+			while (*syms != NULL)
+			{
+				if (strcmp(*syms, optarg) == 0)
+					break;
+				syms++;
+			}
+			if (*syms != NULL)
+				break;
+
+			syms = skipSymToCopy;
+			while (*syms != NULL)
+			{
+				if (strcmp(*syms, optarg) == 0)
+					break;
+				syms++;
+			}
+			if (*syms == NULL)
+				*syms = strdup(optarg);
+			break;
 		}
 	}
 
 	if (filePath == NULL || outFile == NULL || *symToCopy == NULL)
 		error(EXIT_FAILURE, EINVAL, "Invalid parameters to extract symbols. Valid parameters:"
-			  "-f <ELF_FILE> -o <OUT_FILE> -s <SYMBOL_NAME> [-V]");
+			  "-f <ELF_FILE> -o <OUT_FILE> -s <SYMBOL_NAME> [-n <SKIP_DEP_SYMBOL>] [-V]");
 
 	int fd;
 	Elf *pelf = openElf(filePath, &fd);
@@ -1193,7 +1255,7 @@ static void extractSymbols(int argc, char *argv[])
 
 	Elf *outElf = createNewElf(outFile);
 	Symbols = readSymbols(pelf);
-	copySymbols(pelf, outElf, symToCopy);
+	copySymbols(pelf, outElf, symToCopy, skipSymToCopy);
 
 	for (Symbol **s = Symbols; *s != NULL; s++)
 		free(s[0]);

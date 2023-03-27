@@ -158,6 +158,8 @@ buildModules()
 				echo $line
 			done <<< "$out"
 		fi
+		# remove the "_filename.o" file because next build might fails
+		find "$moduledir" -type f -name "_*.o" -delete
 		exit $rc
 	fi
 }
@@ -260,7 +262,15 @@ generateDiffObject()
 		[[ "$fun" == "" ]] && continue
 		extractsyms+="-s $fun "
 	done <<< "$newfun"
-	./elfutils --extract -f "$moduledir/$filename.o" -o "$moduledir/patch.o" $extractsyms
+
+	local skipfun=
+	while read -r fun;
+	do
+		[[ "$fun" == "" ]] && continue
+		skipfun+="-n $fun "
+	done <<< "$originfuncs"
+
+	./elfutils --extract -f "$moduledir/$filename.o" -o "$moduledir/patch.o" $extractsyms $skipfun
 	[[ $? != 0 ]] && { logErr "Failed to extract modified symbols"; exit 1; }
 }
 
