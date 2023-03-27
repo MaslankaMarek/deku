@@ -101,7 +101,7 @@ main()
 	bash generate_module.sh
 	if [ $? -ne 0 ]; then
 		logFatal "Failed"
-		exit 2
+		exit 1
 	fi
 	modules=$(findModifiedModules "$prevmod")
 	if [ -z "$modules" ]; then
@@ -133,9 +133,9 @@ main()
 			args+=("$kofile")
 			logDebug "Make livepatch module"
 			./mklivepatch ${args[@]}
-			if [ $? -ne 0 ]; then
+			if [ $? != 0 ]; then
 				logFatal "Abort!"
-				exit 2
+				exit 1
 			fi
 		else
 			logDebug "Module does not need to adjust relocations"

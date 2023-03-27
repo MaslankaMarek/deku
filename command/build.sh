@@ -29,12 +29,7 @@ main()
 
 	bash generate_hotreload.sh
 	local res=$?
-	if [ $res == 1 ]; then
-		return 1
-	fi
-	if [ $res -ne 0 ]; then
-		exit 2
-	fi
+	[ $res != 0 ] && exit 1
 	return 0
 }
 

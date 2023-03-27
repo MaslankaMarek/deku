@@ -29,7 +29,7 @@ main()
 
 	bash $COMMANDS_DIR/build.sh
 	local res=$?
-	[ $res != 0 ] && [ $res != 1 ] && exit 1
+	[ $res != 0 ] && exit 1
 
 	# find modules need to upload and unload
 	local modulestoupload=()
