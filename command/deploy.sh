@@ -41,9 +41,8 @@ main()
 		local module=${line% *}
 		local id=${line##* }
 		local moduledir="$workdir/$module/"
-		[ ! -f "$moduledir/id" ] && { modulestounload+=" -$module"; continue; }
-		local localid=`cat "$moduledir/id"`
-		# to invalidate remove module from workdir if has been changed 
+		[ ! -f "$moduledir/id" ] && { modulestounload+="-$module"; continue; }
+		local localid=$(<$moduledir/id)
 		[ "$id" == "$localid" ] && modulesontarget+=$module
 	done <<< $(bash deploy/$DEPLOY_TYPE.sh --getids)
 
@@ -51,7 +50,9 @@ main()
 	do
 		[[ "$moduledir" == "" ]] && break
 		local module=`basename $moduledir`
-		[[ ! "${modulesontarget[*]}" =~ "${module}" ]] && modulestoupload+="$moduledir/$module.ko "
+		[[ "${modulesontarget[*]}" =~ "${module}" ]] && continue;
+		[[ "${modulestounload[*]}" =~ "${module}" ]] && continue;
+		modulestoupload+="$moduledir/$module.ko "
 	done <<< "`find $workdir -type d -name deku_*`"
 
 	if ((${#modulestoupload[@]} == 0)) && ((${#modulestounload[@]} == 0)); then

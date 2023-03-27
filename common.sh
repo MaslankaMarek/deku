@@ -116,6 +116,8 @@ generateModuleName()
 	local file=$1
 	local crc=`cksum <<< "$file" | cut -d' ' -f1`
 	crc=$( printf "%08x" $crc );
-	echo deku_${crc}_$(filenameNoExt "$file")
+	local module="$(filenameNoExt $file)"
+	local modulename=${module/-/_}
+	echo deku_${crc}_$modulename
 }
 export -f generateModuleName
