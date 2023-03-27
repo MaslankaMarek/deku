@@ -58,7 +58,7 @@ _**For ChromiumOS developers**_
 Use the `--board` parameter instead of `-b` to auto detect kernel build dir. 
 
 Example usage:  
-`./deku --board=atlas -d ssh -p root@192.168.0.100 init`
+`./deku --board=atlas -d ssh -p root@192.168.0.100:22 init`
 
 If for some reason the `--board` parameter can't be used the `-b` parameter with a kernel dir must be pass.  
 Kernel build directory inside the cros sdk is located in `/build/${BOARD}/var/cache/portage/sys-kernel/chromeos-kernel-${KERNEL_VERSION}`

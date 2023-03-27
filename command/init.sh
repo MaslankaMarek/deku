@@ -54,7 +54,7 @@ isKernelBuildDir()
 		if [ -n "$kplerr" ]; then
 			return 2
 		else
-			logErr "$res"
+			logDebug "$res"
 			return 1
 		fi
 	fi
@@ -64,7 +64,7 @@ isKernelBuildDir()
 isLLVMUsed()
 {
 	local linuxheaders=$1
-	grep -q "CONFIG_CC_IS_CLANG=y" "$linuxheaders/.config"
+	grep -qs "CONFIG_CC_IS_CLANG=y" "$linuxheaders/.config"
 }
 
 enableKLP()
@@ -85,7 +85,7 @@ enableKLP()
 
 main()
 {
-	local builddir="."
+	local builddir=""
 	local sourcesdir="."
 	local deploytype=""
 	local deployparams=""
@@ -131,7 +131,7 @@ main()
 		local kerndir=`find /build/$board/var/db/pkg/sys-kernel/ -type f -name "chromeos-kernel-*"`
 		kerndir=`basename $kerndir`
 		kerndir=${kerndir%-9999*}
-		[[ "$builddir" == "." ]] && builddir="/build/$board/var/cache/portage/sys-kernel/$kerndir"
+		[[ -z "$builddir" ]] && builddir="/build/$board/var/cache/portage/sys-kernel/$kerndir"
 		prebuild="bash integration/cros_prebuild.sh"
 		postbuild="bash integration/cros_postbuild.sh"
 	fi
@@ -140,8 +140,14 @@ main()
 	workdir=${workdir%/}
 	local linuxheaders="$builddir"
 
-	[[ "$deploytype" == "" ]] && { logErr "Please specify deploy type -d [ssh]"; exit 2; }
-	[[ "$deployparams" == "" ]] && { logErr "Please specify parameters for deploy \"$deploytype\". Use -p paramer"; exit 1; }
+	if [[ -z "$builddir" ]]; then
+		if [[ "$CHROMEOS_CHROOT" != 1 ]]; then
+			logErr "Please specify the kernel build directory using -b <PATH_TO_KERNEL_BUILD_DIR> syntax"
+		else
+			logErr "Please specify the ChromeOS board name using --board=<BOARD_NAME> syntax"
+		fi
+		exit 2
+	fi
 
 	[ -L "$builddir/source" ] && sourcesdir="$builddir/source"
 	echo "Check for kernel sources in: $sourcesdir"
@@ -150,7 +156,6 @@ main()
 	sourcesdir=${sourcesdir%/}
 
 	[ "$(git --version)" ] || { logErr "\"git\" could not be found. Please install \"git\""; exit 2; }
-	[ "$(ctags --version)" ] || { logErr "\"ctags\" could not be found. Please install \"exuberant-ctags\""; exit 1; }
 
 	echo "Initialize DEKU"
 	echo "Sources dir: $sourcesdir"
@@ -180,8 +185,6 @@ main()
 					* ) echo "Please answer [y]es or [n]o.";;
 				esac
 			done
-		elif [ "$builddir" = "." ]; then
-			logErr "Current directory is not a kernel build directory"
 		else
 			logErr "Given directory is not a kernel build directory: \"$builddir\""
 		fi
@@ -196,6 +199,9 @@ main()
 		fi
 		exit 2
 	fi
+
+	[[ "$deploytype" == "" ]] && { logErr "Please specify deploy type -d [ssh]"; exit 2; }
+	[[ "$deployparams" == "" ]] && { logErr "Please specify parameters for deploy \"$deploytype\". Use -p paramer"; exit 1; }
 
 	if [ ! -f "deploy/$deploytype.sh" ]; then
 		logErr "Unknown deploy type '$deploytype'"
