@@ -183,7 +183,7 @@ generateDiffObject()
 
 	while read -r fun;
 	do
-		local initfunc=`objdump -t -j ".init.text" "$moduledir/_$filename.o" | grep "\b$fun\b"`
+		local initfunc=`objdump -t -j ".init.text" "$moduledir/_$filename.o" 2>/dev/null | grep "\b$fun\b"`
 		if [[ "$initfunc" != "" ]]; then
 			logInfo "Detect modifications in the init '$fun' function. Changes from this function won't be applied."
 			continue

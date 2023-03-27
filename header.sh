@@ -42,7 +42,7 @@ export COMMANDS_DIR=command
 export CHROMEOS_CHROOT=0
 
 # log level filter
-export LOG_LEVEL=0 # 0 - debug, 1 - info, 2 - warning, 3 - error
+export LOG_LEVEL=1 # 0 - debug, 1 - info, 2 - warning, 3 - error
 
 #colors
 export RED='\033[0;31m'
