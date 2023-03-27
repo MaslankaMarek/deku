@@ -193,7 +193,7 @@ generateDiffObject()
 
 	printf "%s\n" "${modfun[@]}" > "$moduledir/$MOD_SYMBOLS_FILE"
 
-	[[ "$out" == "" ]] && return 0;
+	[[ "$newfun" == "" && ${#modfun[@]} == 0 ]] && return 0;
 
 	local originfuncs=`nm -C -f posix "$BUILD_DIR/${file%.*}.o" | grep -i " t " | cut -d ' ' -f 1`
 	local extractsyms=""
