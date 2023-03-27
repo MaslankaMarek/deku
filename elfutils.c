@@ -24,7 +24,7 @@
 #define MAX_DISASS_LINE_LEN 256
 #endif
 
-static bool ShowDebugLog = 1;
+static bool ShowDebugLog = 0;
 #define LOG_ERR(fmt, ...)                                   \
 	do                                                      \
 	{                                                       \
@@ -980,6 +980,7 @@ static void copySectionWithRel(Elf *elf, Elf *outElf, Elf64_Section index, GElf_
 
 static void copySymbols(Elf *elf, Elf *outElf, char **symbols, char **skipSymbols)
 {
+	Elf_Scn *scn;
 	GElf_Shdr shdr;
 	GElf_Sym sym;
 	size_t symIndex;
@@ -1006,12 +1007,28 @@ static void copySymbols(Elf *elf, Elf *outElf, char **symbols, char **skipSymbol
 		copySectionWithRel(elf, outElf, sym.st_shndx, &sym, skipSymbols, false);
 		syms++;
 	}
-	// needed for BUG()
-	Elf_Scn *scn = getSectionByName(elf, "__bug_table");
-	if (scn)
+	const char *extraSections[] = {".altinstructions", ".altinstr_aux",
+								   ".altinstr_replacement"};
+	for (uint32_t i = 0; i < sizeof(extraSections) / sizeof(*extraSections); i++)
 	{
-		size_t index = elf_ndxscn(scn);
-		copySectionWithRel(elf, outElf, index, NULL, skipSymbols, true);
+		scn = getSectionByName(elf, extraSections[i]);
+		if (scn)
+		{
+			LOG_DEBUG("Copy %s section", extraSections[i]);
+			size_t index = elf_ndxscn(scn);
+			copySectionWithRel(elf, outElf, index, NULL, skipSymbols, false);
+		}
+	}
+	const char *extraFullSections[] = {/* needed for BUG() */ "__bug_table"};
+	for (uint32_t i = 0; i < sizeof(extraFullSections) / sizeof(*extraFullSections); i++)
+	{
+		scn = getSectionByName(elf, extraFullSections[i]);
+		if (scn)
+		{
+			LOG_DEBUG("Copy %s section", extraFullSections[i]);
+			size_t index = elf_ndxscn(scn);
+			copySectionWithRel(elf, outElf, index, NULL, skipSymbols, true);
+		}
 	}
 	// TODO: Fix file path in string sections
 
