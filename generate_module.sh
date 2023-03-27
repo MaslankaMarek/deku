@@ -170,6 +170,7 @@ buildLivepatchModule()
 	local filelog="$moduledir/build.log"
 
 	[[ -f "$filelog" ]] && mv -f $filelog "$moduledir/build_modules.log"
+	touch "$moduledir/.patch.o.cmd"
 	buildModules "$moduledir"
 }
 
