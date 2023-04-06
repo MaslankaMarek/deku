@@ -52,7 +52,7 @@ main()
 		local module=`basename $moduledir`
 		[[ "${modulesontarget[*]}" =~ "${module}" ]] && continue;
 		[[ "${modulestounload[*]}" =~ "${module}" ]] && continue;
-		modulestoupload+="$moduledir/$module.ko "
+		[[ -e "$moduledir/id" ]] && modulestoupload+="$moduledir/$module.ko "
 	done <<< "`find $workdir -type d -name deku_*`"
 
 	if ((${#modulestoupload[@]} == 0)) && ((${#modulestounload[@]} == 0)); then
