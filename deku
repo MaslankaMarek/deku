@@ -52,6 +52,21 @@ exportVars()
 	done < "$CONFIG_FILE"
 }
 
+checkIfUpdated()
+{
+	[[ ! -f "$CONFIG_FILE" ]] && return
+	[[ "$WORKDIR_HASH" == "$(generateDEKUHash)" ]] && return
+
+	logInfo "DEKU has been updated. Running the 'make' command to rebuild the project..."
+	make > /dev/null || exit 1
+	logDebug "Removing modules from $workdir"
+	rm -rf "$workdir"/deku_*
+
+	sed -i "/^WORKDIR_HASH=.*/d" "$CONFIG_FILE"
+	echo "WORKDIR_HASH=$(generateDEKUHash)" >> $CONFIG_FILE
+	logDebug "Done!"
+}
+
 main()
 {
 	local workdir="$DEFAULT_WORKDIR"
@@ -65,6 +80,7 @@ main()
 		fi
 	done
 	exportVars "$workdir"
+	checkIfUpdated
 
 	for ((i=1; i<=$#; i++))
 	do

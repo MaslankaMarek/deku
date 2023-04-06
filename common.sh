@@ -121,3 +121,22 @@ generateModuleName()
 	echo deku_${crc}_$modulename
 }
 export -f generateModuleName
+
+generateDEKUHash()
+{
+	local files=`
+	find command -type f -name "*";				\
+	find deploy -type f -name "*";				\
+	find integration -type f -name "*";			\
+	find . -maxdepth 1 -type f -name "*.sh";	\
+	find . -maxdepth 1 -type f -name "*.c";		\
+	echo ./deku									\
+	`
+	local sum=
+	while read -r file; do
+		sum+=`md5sum $file`
+	done <<< "$files"
+	sum=`md5sum <<< "$sum" | cut -d" " -f1`
+	echo "$sum"
+}
+export -f generateDEKUHash

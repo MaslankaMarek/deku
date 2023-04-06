@@ -219,7 +219,7 @@ main()
 	[[ "$postbuild" != "" ]] && echo "POST_BUILD=\"$postbuild\"" >> $CONFIG_FILE
 	[[ "$board" != "" ]] && echo "CROS_BOARD=\"$board\"" >> $CONFIG_FILE
 	isLLVMUsed "$linuxheaders" && echo "USE_LLVM=\"LLVM=1\"" >> $CONFIG_FILE
-	echo "" >> $CONFIG_FILE
+	echo "WORKDIR_HASH=$(generateDEKUHash)" >> $CONFIG_FILE
 	git --work-tree="$sourcesdir" --git-dir="$workdir/.git" init
 
 	mkdir -p "$SYMBOLS_DIR"
