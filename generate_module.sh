@@ -264,14 +264,7 @@ generateDiffObject()
 		extractsyms+="-s $fun "
 	done <<< "$newfun"
 
-	local skipfun=
-	while read -r fun;
-	do
-		[[ "$fun" == "" ]] && continue
-		skipfun+="-n $fun "
-	done <<< "$originfuncs"
-
-	./elfutils --extract -f "$moduledir/$filename.o" -o "$moduledir/patch.o" $extractsyms $skipfun
+	./elfutils --extract -f "$moduledir/$filename.o" -o "$moduledir/patch.o" $extractsyms
 	[[ $? != 0 ]] && { logErr "Failed to extract modified symbols"; exit 1; }
 }
 
