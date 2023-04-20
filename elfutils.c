@@ -25,26 +25,27 @@
 #endif
 
 static bool ShowDebugLog = 0;
-#define LOG_ERR(fmt, ...)                                   \
-	do                                                      \
-	{                                                       \
-		fprintf(stderr, "ERROR: " fmt "\n", ##__VA_ARGS__); \
-		exit(1);                                            \
+#define LOG_ERR(fmt, ...)												\
+	do																	\
+	{																	\
+		fprintf(stderr, "ERROR (%s:%d): " fmt "\n", __FILE__, __LINE__,	\
+				##__VA_ARGS__);											\
+		exit(1);														\
 	} while (0)
-#define LOG_INFO(fmt, ...)                   \
-	do                                       \
-	{                                        \
-		printf(fmt "\n", ##__VA_ARGS__);     \
+#define LOG_INFO(fmt, ...)												\
+	do																	\
+	{																	\
+		printf(fmt "\n", ##__VA_ARGS__);								\
 	} while (0)
-#define LOG_DEBUG(fmt, ...)                  \
-	do                                       \
-	{                                        \
-		if (ShowDebugLog)                    \
-			printf(fmt "\n", ##__VA_ARGS__); \
+#define LOG_DEBUG(fmt, ...)												\
+	do																	\
+	{																	\
+		if (ShowDebugLog)												\
+			printf(fmt "\n", ##__VA_ARGS__);							\
 	} while (0)
 
-#define CHECK_ALLOC(m) \
-	if (m == NULL)     \
+#define CHECK_ALLOC(m)	\
+	if (m == NULL)		\
 	LOG_ERR("Failed to alloc memory in %s (%s:%d)", __func__, __FILE__, __LINE__)
 
 #define invalidSym(sym) (sym.st_name == 0 && sym.st_info == 0 && sym.st_shndx == 0)
@@ -439,7 +440,7 @@ static int disasmPrintf(void *buf, const char *format, ...)
 	va_end (args);
 
 	char **buffer = (char **)buf;
-	buffer[0] = realloc(buffer[0], strlen(buffer[0]) + len  + 1);
+	buffer[0] = realloc(buffer[0], strlen(buffer[0]) + len + 1);
 	strcat(buffer[0], localBuf);
 	return len;
 }
@@ -622,8 +623,8 @@ static void findModifiedSymbols(Elf *elf, Elf *secondElf)
 				CHECK_ALLOC(dataName);
 
 				const char *scnName = getSectionName(elf, sym.st_shndx);
-				if (strcmp(scnName, dataName) == 0  ||
-					strcmp(scnName, bssName) == 0  ||
+				if (strcmp(scnName, dataName) == 0 ||
+					strcmp(scnName, bssName) == 0 ||
 					strcmp(scnName, ".data") == 0 ||
 					strcmp(scnName, ".bss") == 0)
 					printf("New variable: %s\n", name);
@@ -999,7 +1000,7 @@ static void copySymbols(Elf *elf, Elf *outElf, char **symbols)
 	const char *extraSections[] = {".altinstructions", ".altinstr_aux",
 								   ".altinstr_replacement",
 									/* needed for BUG() */ "__bug_table"
-								   };
+								  };
 	for (size_t i = 0; i < sizeof(extraSections) / sizeof(*extraSections); i++)
 	{
 		scn = getSectionByName(elf, extraSections[i]);

@@ -9,23 +9,23 @@ kerndir=${kerndir%-9999*}
 
 afdo=`sed -nr 's/^(\w+\s)?AFDO_PROFILE_VERSION="(.*)"/\2/p' /build/$CROS_BOARD/var/db/pkg/sys-kernel/$kerndir-9999/$kerndir-9999.ebuild`
 if [[ $afdo != "" ]]; then
-    afdofile=$kerndir-$afdo.gcov
-    afdopath=/var/cache/chromeos-cache/distfiles/$afdofile.xz
-    [[ ! -f $afdopath ]] && afdopath=/build/$CROS_BOARD/tmp/portage/sys-kernel/$kerndir-9999/distdir/$afdofile.xz
-    dstdir=/build/$CROS_BOARD/tmp/portage/sys-kernel/$kerndir-9999/work
-    mkdir -p $dstdir
-    if [[ -f $afdopath ]]; then
-        cp -f $afdopath $dstdir/
-        xz --decompress $dstdir/$afdofile.xz
-        llvm-profdata merge \
-            -sample \
-            -compbinary \
-            -output="$dstdir/$afdofile.compbinary.afdo" \
-            "$dstdir/$afdofile"
-    else
-        logErr "Can't find afdo profile file ($afdopath)"
-        exit 1
-    fi
+	afdofile=$kerndir-$afdo.gcov
+	afdopath=/var/cache/chromeos-cache/distfiles/$afdofile.xz
+	[[ ! -f $afdopath ]] && afdopath=/build/$CROS_BOARD/tmp/portage/sys-kernel/$kerndir-9999/distdir/$afdofile.xz
+	dstdir=/build/$CROS_BOARD/tmp/portage/sys-kernel/$kerndir-9999/work
+	mkdir -p $dstdir
+	if [[ -f $afdopath ]]; then
+		cp -f $afdopath $dstdir/
+		xz --decompress $dstdir/$afdofile.xz
+		llvm-profdata merge \
+			-sample \
+			-compbinary \
+			-output="$dstdir/$afdofile.compbinary.afdo" \
+			"$dstdir/$afdofile"
+	else
+		logErr "Can't find afdo profile file ($afdopath)"
+		exit 1
+	fi
 else
-    logInfo "Can't find afdo profile file"
+	logInfo "Can't find afdo profile file"
 fi

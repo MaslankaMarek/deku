@@ -80,8 +80,8 @@ runQemu()
 
 remoteSh()
 {
-  REMOTE_OUT=$(ssh $SSHPARAMS "$@")
-  return ${PIPESTATUS[0]}
+	REMOTE_OUT=$(ssh $SSHPARAMS "$@")
+	return ${PIPESTATUS[0]}
 }
 
 prepareKernelSources()

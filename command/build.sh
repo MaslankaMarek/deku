@@ -8,7 +8,7 @@ main()
 	local syncversion=$(<"$KERNEL_VERSION_FILE")
 	local localversion=$(getKernelVersion)
 	if [[ "$syncversion" != "$localversion" ]]; then
-		logWarn "Kernel image in build directory has changed from last run. You must undo any changes made after kernel was rebuild and run 'make sync'."
+		logWarn "Kernel image in the build directory has changed from last run. You must undo any changes made after the kernel was built and run 'make sync' again."
 		exit 2
 	fi
 
@@ -18,12 +18,13 @@ main()
 	do
 		validmodules+=$(generateModuleName "$file")
 	done
+	local modules=`find "$workdir" -type d -name "deku_*"`
 	while read moduledir
 	do
 		[[ $moduledir == "" ]] && break
 		local module=`basename $moduledir`
-		[[ ! " ${validmodules[*]} " =~ "$module" ]] && rm -rf  "$moduledir"
-	done <<< "`find $workdir -type d -name deku_*`"
+		[[ ! " ${validmodules[*]} " =~ "$module" ]] && rm -rf "$moduledir"
+	done <<< "$modules"
 
 	echo "Build DEKU module"
 

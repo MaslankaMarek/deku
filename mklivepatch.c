@@ -125,7 +125,7 @@ static char **getSymbolNames(Elf *elf)
 	Elf_Data *data = elf_getdata(scn, NULL);
 	gelf_getshdr(scn, &shdr);
 	size_t cnt = shdr.sh_size / shdr.sh_entsize;
-	result = (char **)calloc(cnt + 1,  sizeof(char *));
+	result = (char **)calloc(cnt + 1, sizeof(char *));
 	CHECK_ALLOC(result);
 	for (size_t i = 0; i < cnt; i++)
 	{

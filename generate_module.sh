@@ -224,7 +224,7 @@ generateDiffObject()
 
 	printf "%s\n" "${modfun[@]}" > "$moduledir/$MOD_SYMBOLS_FILE"
 
-	[[ "$newfun" == "" && ${#modfun[@]} == 0 ]] && return 0;
+	[[ "$newfun" == "" && ${#modfun[@]} == 0 ]] && return 0
 
 	local originfuncs=`nm -C -f posix "$BUILD_DIR/${file%.*}.o" | grep -i " t " | cut -d ' ' -f 1`
 	local extractsyms=""
@@ -270,7 +270,12 @@ generateDiffObject()
 	done <<< "$newfun"
 
 	./elfutils --extract -f "$moduledir/$filename.o" -o "$moduledir/patch.o" $extractsyms
-	[[ $? != 0 ]] && { logErr "Failed to extract modified symbols"; exit 1; }
+	if [[ $? != 0 ]]; then
+		logErr "Failed to extract modified symbols for $(<$moduledir/$FILE_SRC_PATH)"
+		exit 1
+	fi
+
+	return 1
 }
 
 generateLivepatchSource()
@@ -295,7 +300,7 @@ generateLivepatchSource()
 	fi
 
 	while read -r symbol; do
-		local plainsymbol="${symbol//./_}" 
+		local plainsymbol="${symbol//./_}"
 		# fill list of a klp_func struct
 		klpfunc="$klpfunc		{
 			.old_name = \"${symbol}\",
@@ -398,7 +403,7 @@ main()
 		# check if changed since last run
 		if [ -s "$moduledir/id" ]; then
 			local prev=$(<$moduledir/id)
-			[ "$prev" ==  "$moduleid" ] && continue
+			[ "$prev" == "$moduleid" ] && continue
 		fi
 
 		rm -rf $moduledir
@@ -441,7 +446,7 @@ main()
 		while read -r symbol; do
 			local plainsymbol="${symbol//./_}"
 			./elfutils --changeCallSymbol -s ${DEKU_FUN_PREFIX}${plainsymbol} -d ${plainsymbol} \
-					   "$moduledir/$module.ko" || ext 1
+					   "$moduledir/$module.ko" || exit 1
 			objcopy --strip-symbol=${DEKU_FUN_PREFIX}${plainsymbol} "$moduledir/$module.ko"
 		done < "$moduledir/$MOD_SYMBOLS_FILE"
 

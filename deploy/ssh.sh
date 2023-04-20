@@ -33,7 +33,7 @@ getKernelVersion()
 
 originModName()
 {
-	echo ${1:13}
+	echo ${1:14}
 }
 
 main()
@@ -83,7 +83,7 @@ main()
 			skipload=1
 			files=("${files[@]/$file}")
 			file="${file:1}"
-			echo "Unload $file"
+			logInfo "Unload $file"
 		fi
 
 		local module="$(filenameNoExt $file)"

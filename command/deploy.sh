@@ -46,14 +46,15 @@ main()
 		[ "$id" == "$localid" ] && modulesontarget+=$module
 	done <<< $(bash deploy/$DEPLOY_TYPE.sh --getids)
 
-	while read -r moduledir
-	do
+	local modules=`find $workdir -type d -name "deku_*" | tr '\n' ' '`
+	read -a modules <<< "$modules"
+	for moduledir in "${modules[@]}"; do
 		[[ "$moduledir" == "" ]] && break
 		local module=`basename $moduledir`
 		[[ "${modulesontarget[*]}" =~ "${module}" ]] && continue;
 		[[ "${modulestounload[*]}" =~ "${module}" ]] && continue;
 		[[ -e "$moduledir/id" ]] && modulestoupload+="$moduledir/$module.ko "
-	done <<< "`find $workdir -type d -name deku_*`"
+	done
 
 	if ((${#modulestoupload[@]} == 0)) && ((${#modulestounload[@]} == 0)); then
 		echo "No modules need to upload"
