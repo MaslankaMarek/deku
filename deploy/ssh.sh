@@ -125,7 +125,8 @@ main()
 	scp $SCPPARAMS $files $workdir/$DEKU_RELOAD_SCRIPT $host:$dstdir/
 	logInfo "Loading..."
 	remoteSh sh "$dstdir/$DEKU_RELOAD_SCRIPT 2>&1"
-	if [ $? == 0 ]; then
+	local res=$?
+	if [ $res == 0 ]; then
 		echo -e "${GREEN}Changes applied successfully!${NC}"
 	else
 		logFatal "----------------------------------------"
@@ -133,6 +134,7 @@ main()
 		logFatal "----------------------------------------"
 		logFatal "Apply changes failed!\nCheck system logs on the device to get more informations"
 	fi
+	return $res
 }
 
 main $@
