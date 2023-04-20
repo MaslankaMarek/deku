@@ -116,6 +116,17 @@ static size_t appendString(GElf_Shdr *shdr, Elf_Data *data, const char *text)
 	return oldSize;
 }
 
+static GElf_Shdr getSectionHeader(Elf *elf, Elf64_Section index)
+{
+	GElf_Shdr shdr = {0};
+	size_t shstrndx;
+	elf_getshdrstrndx(elf, &shstrndx);
+	Elf_Scn *scn = elf_getscn(elf, index);
+	if (scn)
+		gelf_getshdr(scn, &shdr);
+	return shdr;
+}
+
 static Elf_Scn *getSectionByName(Elf *elf, const char *secName)
 {
 	Elf_Scn *scn = NULL;
@@ -147,13 +158,9 @@ static Elf_Scn *getRelForSectionIndex(Elf *elf, Elf64_Section index)
 
 static char *getSectionName(Elf *elf, Elf64_Section index)
 {
-	GElf_Shdr shdr;
 	size_t shstrndx;
 	elf_getshdrstrndx(elf, &shstrndx);
-	Elf_Scn *scn = elf_getscn(elf, index);
-	if (!scn)
-		return NULL;
-	gelf_getshdr(scn, &shdr);
+	GElf_Shdr shdr = getSectionHeader(elf, index);
 	return elf_strptr(elf, shstrndx, shdr.sh_name);
 }
 
@@ -194,6 +201,9 @@ static Symbol **readSymbols(Elf *elf)
 			const char *scnName = getSectionName(elf, sym.st_shndx);
 			if (strstr(scnName, ".data.") == scnName ||
 				strstr(scnName, ".bss.") == scnName)
+				syms[i]->isVar = true;
+			if (strstr(scnName, ".rodata.") == scnName ||
+				strstr(scnName, ".rodata.str") != scnName)
 				syms[i]->isVar = true;
 		}
 		syms[i]->st_info = sym.st_info;
@@ -950,27 +960,41 @@ static void copySymbols(Elf *elf, Elf *outElf, char **symbols)
 	GElf_Sym sym;
 	size_t symIndex;
 	char **syms = symbols;
+	bool *symToCopy = calloc(sizeof(bool), SymbolsCount);
+	CHECK_ALLOC(symToCopy);
+
 	while(*syms != NULL)
 	{
 		sym = getSymbolByName(elf, *syms, &symIndex);
 		if (sym.st_name == 0)
 			LOG_ERR("Can't find symbol: %s", *syms);
+		symToCopy[symIndex] = true;
+		syms++;
+	}
+
+	for (size_t i = 0; i < SymbolsCount; i++)
+	{
+		if (!symToCopy[i])
+			continue;
+
+		sym = getSymbolByIndex(elf, i);
 		Elf_Scn *newScn = copySection(elf, outElf, sym.st_shndx, true);
-		size_t index = copySymbol(elf, outElf, symIndex, true);
+		size_t index = copySymbol(elf, outElf, i, true);
 		Elf_Scn *symScn = getSectionByName(outElf, ".symtab");
 		gelf_getshdr(symScn, &shdr);
 		Elf_Data *symData = elf_getdata(symScn, NULL);
 		gelf_getsym(symData, index, &sym);
 		sym.st_shndx = elf_ndxscn(newScn);
 		gelf_update_sym(symData, index, &sym);
-		syms++;
 	}
-	syms = symbols;
-	while(*syms != NULL)
+
+	for (size_t i = 0; i < SymbolsCount; i++)
 	{
-		sym = getSymbolByName(elf, *syms, &symIndex);
+		if (!symToCopy[i])
+			continue;
+
+		sym = getSymbolByIndex(elf, i);
 		copySectionWithRel(elf, outElf, sym.st_shndx, &sym);
-		syms++;
 	}
 	const char *extraSections[] = {".altinstructions", ".altinstr_aux",
 								   ".altinstr_replacement",
@@ -992,6 +1016,8 @@ static void copySymbols(Elf *elf, Elf *outElf, char **symbols)
 
 	elf_update(outElf, ELF_C_WRITE);
 	elf_end(outElf);
+
+	free(symToCopy);
 }
 
 static Elf *openElf(const char *filePath, int *fd)
