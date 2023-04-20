@@ -210,6 +210,11 @@ generateDiffObject()
 			logInfo "Detect modifications in the init '$fun' function. Changes from this function won't be applied."
 			continue
 		fi
+		if [[ $fun == *".cold" ]]; then
+			local originfun=${fun%.*}
+			logErr "Can't apply changes to '$file' because the compiler in this file has optimized the '$originfun' function and split it into two parts. This is not yet supported by DEKU."
+			exit 1
+		fi
 		if ! isTraceable "$BUILD_DIR/${file%.*}.o" $fun; then
 			logErr "Can't apply changes to the '$file' because the '$fun' function is forbidden to modify."
 			exit 1
