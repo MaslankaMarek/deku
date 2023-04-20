@@ -33,6 +33,11 @@ getSymbolsToRelocate()
 	local module=$1
 	local originobj=$2
 	local symvers=$3
+	local ignoresymbols=(
+						"__func__.0"
+						"__func__.1"
+						"_printk"
+						)
 	local syms=()
 	local staticsymbols=(`readelf -W -s "$originobj" | \
 						  awk 'BEGIN { ORS=" " } {
@@ -47,6 +52,7 @@ getSymbolsToRelocate()
 	for sym in "${undsymbols[@]}"
 	do
 		[[ "$sym" == $DEKU_FUN_PREFIX* ]] && continue
+		[[ " ${ignoresymbols[*]} " =~ " $sym " ]] && continue
 		[[ ! " ${syms[*]} " =~ " $sym " || " ${staticsymbols[*]} " =~ " $sym " ]] && echo "$sym"
 	done
 }
