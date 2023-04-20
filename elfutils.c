@@ -1075,7 +1075,7 @@ static void symbolCallees(Elf *elf, Symbol *s, size_t *result)
 	}
 }
 
-static void printCallees(Symbol *s, size_t *callStack)
+static void printCallees(Symbol *s, size_t *callStack, bool *visited)
 {
 	size_t *stack = callStack;
 	while(*stack-- != 0)
@@ -1083,6 +1083,9 @@ static void printCallees(Symbol *s, size_t *callStack)
 		if (*stack == s->index)
 			return;
 	}
+	if (visited[s->index])
+		return;
+	visited[s->index] = true;
 
 	*callStack = s->index;
 	size_t *calleeIdx = s->callees;
@@ -1098,7 +1101,7 @@ static void printCallees(Symbol *s, size_t *callStack)
 	}
 	while(*calleeIdx != 0)
 	{
-		printCallees(Symbols[*calleeIdx], callStack + 1);
+		printCallees(Symbols[*calleeIdx], callStack + 1, visited);
 		calleeIdx++;
 	}
 }
@@ -1174,16 +1177,19 @@ static void findCallChains(int argc, char *argv[])
 		}
 	}
 	size_t *callStack = malloc(SymbolsCount * sizeof(size_t));
+	bool *visited = malloc(SymbolsCount * sizeof(bool));
 	CHECK_ALLOC(callStack);
 	for (Symbol **s = Symbols; *s != NULL; s++)
 	{
 		if (s[0]->isFun)
 		{
 			memset(callStack, 0, SymbolsCount * sizeof(size_t));
-			printCallees(s[0], callStack + 1);
+			memset(visited, 0, SymbolsCount * sizeof(bool));
+			printCallees(s[0], callStack + 1, visited);
 		}
 	}
 	free(callStack);
+	free(visited);
 	close(fd);
 }
 

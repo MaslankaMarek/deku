@@ -212,10 +212,17 @@ generateDiffObject()
 		fi
 		if [[ $fun == *".cold" ]]; then
 			local originfun=${fun%.*}
-			logErr "Can't apply changes to '$file' because the compiler in this file has optimized the '$originfun' function and split it into two parts. This is not yet supported by DEKU."
-			exit 1
-		fi
-		if ! isTraceable "$BUILD_DIR/${file%.*}.o" $fun; then
+			local calls=`./elfutils --callchain -f "$moduledir/$filename.o" | \
+						 grep -E "\b$fun \b"`
+			local callswithparent=`./elfutils --callchain -f "$moduledir/$filename.o" | \
+								    grep -E "\b$fun $originfun\b"`
+			# check if ".cold" part of function is only called by the origin
+			# function. If not, then disallow for changes
+			if [[ "$calls" != "$callswithparent" ]]; then
+				logErr "Can't apply changes to '$file' because the compiler in this file has optimized the '$originfun' function and split it into two parts. This is not yet supported by DEKU."
+				exit 1
+			fi
+		elif ! isTraceable "$BUILD_DIR/${file%.*}.o" $fun; then
 			logErr "Can't apply changes to the '$file' because the '$fun' function is forbidden to modify."
 			exit 1
 		fi
