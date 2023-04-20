@@ -45,15 +45,14 @@ getSymbolsToRelocate()
 						  }'`)
 	local undsymbols=(`readelf -W -s "$module" | awk 'BEGIN { ORS=" " } { if($7 == "UND") {print $8} }'`)
 	local greparg=`printf -- " -e \\s%s\\s" "${undsymbols[@]}"`
-	local out=`grep $greparg "$symvers"`
-	while read -r mod; do
-		syms[${#syms[@]}]="$mod"
-	done <<< "$out"
+	local globalsymbols=`grep $greparg "$symvers" | tr '\n' ' '`
+	read -a globalsymbols <<< "$globalsymbols"
 	for sym in "${undsymbols[@]}"
 	do
 		[[ "$sym" == $DEKU_FUN_PREFIX* ]] && continue
 		[[ " ${ignoresymbols[*]} " =~ " $sym " ]] && continue
-		[[ ! " ${syms[*]} " =~ " $sym " || " ${staticsymbols[*]} " =~ " $sym " ]] && echo "$sym"
+		[[ " ${globalsymbols[*]} " =~ " $sym " ]] && continue
+		echo "$sym"
 	done
 }
 
@@ -75,6 +74,14 @@ relocations()
 			logErr "Can't find symbol: $sym"
 			exit 1
 		fi
+		if [[ $objname != "vmlinux" ]]; then
+			local objpath=`find $SYMBOLS_DIR -type f -name "$objname"`
+			objpath=${objpath#*$SYMBOLS_DIR/}.ko
+			local cnt=`nm "$BUILD_DIR/$objpath" | grep "\b$sym\b" | wc -l`
+			if [[ $cnt > 1 ]]; then
+				logErr "A relocation is needed for the '$sym' function, which is located in the kernel module. This is not yet supported by DEKU."
+			fi
+		fi
 		echo "$objname.$sym"
 	done <<< "$syms"
 }
@@ -92,7 +99,7 @@ findSymbolIndex()
 	local count=`grep " $symbol$" "$mapfile" | wc -l`
 	[[ $count == "1" ]] && return
 	logInfo "Found $count occurrences of the symbol '$symbol'"
-	local maches=`grep -A 5 -B 5 " $symbol$" "$mapfile" | cut -d " " -f 3`
+	local maches=`grep -A 10 -B 10 " $symbol$" "$mapfile" | cut -d " " -f 3`
 	index=1
 	local occure=0
 	while read -r sym; do

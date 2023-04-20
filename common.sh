@@ -63,7 +63,6 @@ findObjWithSymbol()
 	local sym=$1
 	local srcfile=$2
 
-	grep -q "\b$sym\b" "$SYSTEM_MAP" && { echo vmlinux; return; }
 	local out=`grep -lr "\b$sym\b" $SYMBOLS_DIR`
 	[ "$out" != "" ] && { echo $(filenameNoExt "$out"); return; }
 
@@ -87,6 +86,7 @@ findObjWithSymbol()
 		srcpath+="/.."
 		modulespath+="/.."
 	done
+	grep -q "\b$sym\b" "$SYSTEM_MAP" && { echo vmlinux; return; }
 
 	# not found
 }
