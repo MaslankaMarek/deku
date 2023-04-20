@@ -31,8 +31,13 @@ findModifiedModules()
 getSymbolsToRelocate()
 {
 	local module=$1
-	local symvers=$2
+	local originobj=$2
+	local symvers=$3
 	local syms=()
+	local staticsymbols=(`readelf -W -s "$originobj" | \
+						  awk 'BEGIN { ORS=" " } {
+						  	if(($4 == "FUNC" || $4 == "OBJECT") && $5 == "LOCAL" ) {print $8}
+						  }'`)
 	local undsymbols=(`readelf -W -s "$module" | awk 'BEGIN { ORS=" " } { if($7 == "UND") {print $8} }'`)
 	local greparg=`printf -- " -e \\s%s\\s" "${undsymbols[@]}"`
 	local out=`grep $greparg "$symvers"`
@@ -42,7 +47,7 @@ getSymbolsToRelocate()
 	for sym in "${undsymbols[@]}"
 	do
 		[[ "$sym" == $DEKU_FUN_PREFIX* ]] && continue
-		[[ ! "${syms[*]}" =~ "$sym" ]] && echo "$sym"
+		[[ ! " ${syms[*]} " =~ " $sym " || " ${staticsymbols[*]} " =~ " $sym " ]] && echo "$sym"
 	done
 }
 
@@ -51,12 +56,14 @@ relocations()
 	local moduledir=$1
 	local module=$2
 	local modsymfile="$moduledir/$MOD_SYMBOLS_FILE"
+	local srcfile=$(<$moduledir/$FILE_SRC_PATH)
+	local originobj="$BUILD_DIR/${srcfile%.*}.o"
 
-	local syms=$(getSymbolsToRelocate "$moduledir/$module.ko" "$LINUX_HEADERS/Module.symvers")
+	local syms=$(getSymbolsToRelocate "$moduledir/$module.ko" "$originobj" "$LINUX_HEADERS/Module.symvers")
+
 	while read -r sym;
 	do
 		grep -q "\b$sym\b" "$modsymfile" && continue
-		local srcfile=$(<$moduledir/$FILE_SRC_PATH)
 		local objname=$(findObjWithSymbol "$sym" "$srcfile")
 		if [[ "$objname" == "" ]]; then
 			logErr "Can't find symbol: $sym"
