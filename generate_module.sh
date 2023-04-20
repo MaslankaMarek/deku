@@ -231,6 +231,16 @@ generateDiffObject()
 			logErr "Can't apply changes to the '$file' because the '$fun' function is forbidden to modify."
 			exit 1
 		fi
+
+		local objpath=$(findObjWithSymbol $fun "$file")
+		if [[ "$objpath" == "vmlinux" ]]; then
+			local count=`nm "$BUILD_DIR/$objpath" | grep "\b$fun\b" | wc -l`
+			if [[ $count > 1 ]]; then
+				logErr "Can't apply changes to '$file' because there are multiple functions with the '$fun' name in the kernel image. This is not yet supported by DEKU."
+				exit 1
+			fi
+		fi
+
 		modfun+=("$fun")
 	done <<< "$tmpmodfun"
 
