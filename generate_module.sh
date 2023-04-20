@@ -207,7 +207,12 @@ generateDiffObject()
 		[[ $fun == "" ]] && continue
 		local initfunc=`objdump -t -j ".init.text" "$moduledir/_$filename.o" 2>/dev/null | grep "\b$fun\b"`
 		if [[ "$initfunc" != "" ]]; then
-			logInfo "Detect modifications in the init '$fun' function. Changes from this function won't be applied."
+			logInfo "Detected modifications in the init function '$fun'. Modifications from this function will not be applied."
+			continue
+		fi
+		local initfunc=`objdump -t -j ".exit.text" "$moduledir/_$filename.o" 2>/dev/null | grep "\b$fun\b"`
+		if [[ "$initfunc" != "" ]]; then
+			logInfo "Detected modifications in the exit function '$fun'. Modifications from this function will not be applied."
 			continue
 		fi
 		if [[ $fun == *".cold" ]]; then
