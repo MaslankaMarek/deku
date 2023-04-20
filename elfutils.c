@@ -195,9 +195,8 @@ static Symbol **readSymbols(Elf *elf)
 			syms[i]->isFun = true;
 		}
 		// is variable
-		if ((sym.st_info == ELF64_ST_INFO(STB_GLOBAL, STT_OBJECT) ||
-			 (sym.st_info == ELF64_ST_INFO(STB_LOCAL, STT_OBJECT))) &&
-			strlen(syms[i]->name) > 0 && sym.st_value == 0)
+		if (sym.st_info == ELF64_ST_INFO(STB_GLOBAL, STT_OBJECT) ||
+			(sym.st_info == ELF64_ST_INFO(STB_LOCAL, STT_OBJECT)))
 		{
 			const char *scnName = getSectionName(elf, sym.st_shndx);
 			if (strstr(scnName, ".data.") == scnName ||
@@ -930,11 +929,20 @@ static void copyRelSection(Elf *elf, Elf *outElf, Elf64_Section index, size_t re
 		if (fromSym != NULL &&
 			(rela.r_offset < fromSym->st_value || rela.r_offset > fromSym->st_value + fromSym->st_size))
 			continue;
-
-		Symbol *sym = getSymbolForRelocation(rela);
-		bool isFuncOrVar = Symbols[sym->index]->isFun || Symbols[sym->index]->isVar;
-		bool copySec = fromSym == NULL ? true : !isFuncOrVar;
-		size_t newSymIndex = copySymbol(elf, outElf, sym->index, copySec);
+		size_t newSymIndex;
+		size_t symIndex = ELF64_R_SYM(rela.r_info);
+		GElf_Shdr shdr = getSectionHeader(elf, Symbols[symIndex]->secIndex);
+		if (shdr.sh_flags & SHF_STRINGS)
+		{
+			newSymIndex = copySymbol(elf, outElf, symIndex, true);
+		}
+		else
+		{
+			Symbol *sym = getSymbolForRelocation(rela);
+			bool isFuncOrVar = Symbols[sym->index]->isFun || Symbols[sym->index]->isVar;
+			bool copySec = fromSym == NULL ? true : !isFuncOrVar;
+			newSymIndex = copySymbol(elf, outElf, sym->index, copySec);
+		}
 		rela.r_info = ELF64_R_INFO(newSymIndex, ELF64_R_TYPE(rela.r_info));
 		gelf_update_rela(outData, j, &rela);
 		j++;
