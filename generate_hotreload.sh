@@ -84,7 +84,7 @@ findSymbolIndex()
 	local -n index=$1
 	local rel=$2
 	local kofile=$3
-	local objname=${rel%.*}
+	local objname=${rel%%.*}
 	local symbol=${rel#*.}
 	index=0
 	[[ "$objname" != "vmlinux" ]] && return
