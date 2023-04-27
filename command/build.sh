@@ -9,7 +9,7 @@ main()
 	local localversion=$(getKernelVersion)
 	if [[ "$syncversion" != "$localversion" ]]; then
 		logWarn "Kernel image in the build directory has changed from last run. You must undo any changes made after the kernel was built and run 'make sync' again."
-		exit 2
+		exit $ERROR_NOT_SYNCED
 	fi
 
 	# remove old modules from workdir
@@ -29,10 +29,7 @@ main()
 	echo "Build DEKU module"
 
 	bash generate_hotreload.sh
-	local res=$?
-	[ $res != 0 ] && exit 1
-	return 0
+	return $?
 }
 
 main $@
-exit $?

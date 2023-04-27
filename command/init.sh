@@ -18,7 +18,7 @@ isKernelSroucesDir()
 	return 0
 }
 
-isKernelBuildDir()
+checkKernelBuildDir()
 {
 	local dir=$1
 
@@ -46,19 +46,19 @@ isKernelBuildDir()
 	echo "obj-m += test.o" > "$tmpdir/Makefile"
 	echo "all:" >> "$tmpdir/Makefile"
 	echo "	make -C $1 M=\$(PWD)/$tmpdir modules" >> "$tmpdir/Makefile"
-	res=`make -C $tmpdir LLVM=$usellvm 2>&1`
-	rc=$?
+	out=`make -C $tmpdir LLVM=$usellvm 2>&1`
+	local rc=$?
 	rm -rf $tmpdir
-	if [ $rc -ne 0 ]; then
-		local kplerr=`echo "$res" | grep "klp_enable_patch"`
+	if [ $rc != 0 ]; then
+		local kplerr=`echo "$out" | grep "klp_enable_patch"`
 		if [ -n "$kplerr" ]; then
-			return 2
+			return $ERROR_KLP_IS_NOT_ENABLED
 		else
-			logDebug "$res"
-			return 1
+			logErr "$out"
+			return $ERROR_UNKNOWN
 		fi
 	fi
-	return 0
+	return $NO_ERROR
 }
 
 isLLVMUsed()
@@ -169,26 +169,26 @@ main()
 		mkdir -p "$workdir"
 	fi
 
-	isKernelBuildDir $builddir
-	local res=$?
-	if [[ $res != 0 ]]; then
-		if [[ $res == 2 ]]; then
+	checkKernelBuildDir $builddir
+	local rc=$?
+	if [[ $rc != $NO_ERROR ]]; then
+		if [[ $rc == $ERROR_KLP_IS_NOT_ENABLED ]]; then
 			logErr "Kernel livepatching is not enabled. Please enable CONFIG_LIVEPATCH flag and rebuild the kernel"
 			echo "Would you like to try enable this flag now? [y/n]"
 			while true; do
 				read -p "" yn
 				case $yn in
 					[Yy]* )
-						enableKLP "$sourcesdir" && { logInfo "Flag was enabled. Pleas rebuild the kernel and try again."; exit 1; } || "Failed do enable the flag. Please enable it manually."
+						enableKLP "$sourcesdir" && { logInfo "Flag is enabled. Please rebuild the kernel and try again."; exit $rc; } || logInfo "Failed do enable the flag. Please enable it manually."
 						break;;
-					[Nn]* ) exit 2;;
+					[Nn]* ) exit $rc;;
 					* ) echo "Please answer [y]es or [n]o.";;
 				esac
 			done
 		else
-			logErr "Given directory is not a kernel build directory: \"$builddir\""
+			logErr "Given directory might not be a kernel build directory: \"$builddir\""
 		fi
-		exit 2
+		exit $rc
 	fi
 
 	if ! isKernelSroucesDir $sourcesdir; then
@@ -197,15 +197,15 @@ main()
 		else
 			logErr "Given directory does not contains valid kernel sources: \"$sourcesdir\""
 		fi
-		exit 2
+		exit $ERROR_INVALID_KERN_SRC_DIR
 	fi
 
-	[[ "$deploytype" == "" ]] && { logErr "Please specify deploy type -d [ssh]"; exit 2; }
-	[[ "$deployparams" == "" ]] && { logErr "Please specify parameters for deploy \"$deploytype\". Use -p paramer"; exit 1; }
+	[[ "$deploytype" == "" ]] && { logErr "Please specify deploy type -d [ssh]"; exit $ERROR_NO_DEPLOY_TYPE; }
+	[[ "$deployparams" == "" ]] && { logErr "Please specify parameters for deploy \"$deploytype\". Use -p paramer"; exit $ERROR_NO_DEPLOY_PARAMS; }
 
 	if [ ! -f "deploy/$deploytype.sh" ]; then
 		logErr "Unknown deploy type '$deploytype'"
-		exit 2
+		exit $ERROR_INVALID_DEPLOY_TYPE
 	fi
 
 	echo "BUILD_DIR=\"$builddir\"" > $CONFIG_FILE

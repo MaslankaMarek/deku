@@ -24,7 +24,7 @@ if [[ $afdo != "" ]]; then
 			"$dstdir/$afdofile"
 	else
 		logErr "Can't find afdo profile file ($afdopath)"
-		exit 1
+		exit $ERROR_CANT_FIND_AFDO
 	fi
 else
 	logInfo "Can't find afdo profile file"

@@ -119,10 +119,10 @@ buildFile()
 	cmd+=" -o $outfile $compilefile"
 	cd "$LINUX_HEADERS"
 	eval "$cmd"
-	local res=$?
+	local rc=$?
 	cd $OLDPWD
-	[[ $res != 0 ]] && logInfo "Failed to build $srcfile"
-	return $res
+	[[ $rc != 0 ]] && logInfo "Failed to build $srcfile"
+	return $rc
 }
 
 buildModules()
@@ -142,11 +142,11 @@ buildModules()
 		local errorcatched=0
 		while read -r line;
 		do
-			err=`echo $line | sed -n "s/$regexerr/\1\|\2/p"`
+			local err=`echo $line | sed -n "s/$regexerr/\1\|\2/p"`
 			if [ -n "$err" ]; then
 				local file=`echo $line | sed "s/$regexerr/\1/" | tr -d "//"`
 				local no=`echo $line | sed "s/$regexerr/\2/"`
-				local err=`echo $line | sed "s/$regexerr/\3/"`
+				err=`echo $line | sed "s/$regexerr/\3/"`
 				echo -e "$file:$no ${RED}error:${NC} $err. See more: $filelog"
 				errorcatched=1
 			fi
@@ -160,7 +160,7 @@ buildModules()
 		fi
 		# remove the "_filename.o" file because next build might fails
 		find "$moduledir" -type f -name "_*.o" -delete
-		exit $rc
+		exit $ERROR_BUILD_MODULE
 	fi
 }
 
@@ -225,11 +225,11 @@ generateDiffObject()
 			# function. If not, then disallow for changes
 			if [[ "$calls" != "$callswithparent" ]]; then
 				logErr "Can't apply changes to '$file' because the compiler in this file has optimized the '$originfun' function and split it into two parts. This is not yet supported by DEKU."
-				exit 1
+				exit $ERROR_NO_SUPPORT_COLD_FUN
 			fi
 		elif ! isTraceable "$BUILD_DIR/${file%.*}.o" $fun; then
 			logErr "Can't apply changes to the '$file' because the '$fun' function is forbidden to modify."
-			exit 1
+			exit $ERROR_FORBIDDEN_MODIFY
 		fi
 
 		local objpath=$(findObjWithSymbol $fun "$file")
@@ -237,7 +237,7 @@ generateDiffObject()
 			local count=`nm "$BUILD_DIR/$objpath" | grep "\b$fun\b" | wc -l`
 			if [[ $count > 1 ]]; then
 				logErr "Can't apply changes to '$file' because there are multiple functions with the '$fun' name in the kernel image. This is not yet supported by DEKU."
-				exit 1
+				exit $ERROR_NO_SUPPORT_MULTI_FUNC
 			fi
 		fi
 
@@ -294,7 +294,7 @@ generateDiffObject()
 	./elfutils --extract -f "$moduledir/$filename.o" -o "$moduledir/patch.o" $extractsyms
 	if [[ $? != 0 ]]; then
 		logErr "Failed to extract modified symbols for $(<$moduledir/$FILE_SRC_PATH)"
-		exit 1
+		exit $ERROR_EXTRACT_SYMBOLS
 	fi
 
 	return 1
@@ -394,14 +394,14 @@ main()
 	local files=$(modifiedFiles)
 	if [ -z "$files" ]; then
 		# No modification detected
-		exit
+		exit $NO_ERROR
 	fi
 
 	for file in $files
 	do
 		if [[ "${file#*.}" != "c" ]]; then
 			logWarn "Only changes in '.c' files are supported. Undo changes in $file and try again."
-			exit 1
+			exit $ERROR_UNSUPPORTED_CHANGES
 		fi
 	done
 
@@ -468,7 +468,7 @@ main()
 		while read -r symbol; do
 			local plainsymbol="${symbol//./_}"
 			./elfutils --changeCallSymbol -s ${DEKU_FUN_PREFIX}${plainsymbol} -d ${plainsymbol} \
-					   "$moduledir/$module.ko" || exit 1
+					   "$moduledir/$module.ko" || exit $ERROR_CHANGE_CALL_TO_ORIGIN
 			objcopy --strip-symbol=${DEKU_FUN_PREFIX}${plainsymbol} "$moduledir/$module.ko"
 		done < "$moduledir/$MOD_SYMBOLS_FILE"
 

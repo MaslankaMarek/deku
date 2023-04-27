@@ -6,7 +6,7 @@
 regenerateSymbols()
 {
 	local files=`find "$SYMBOLS_DIR" -type f`
-	[ "$files" == "" ] && return
+	[ "$files" == "" ] && return $NO_ERROR
 	while read -r file; do
 		file=${file#*$SYMBOLS_DIR/}
 		generateSymbols "$MODULES_DIR/$file.ko"

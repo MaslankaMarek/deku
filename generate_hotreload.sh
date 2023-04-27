@@ -70,10 +70,6 @@ relocations()
 	do
 		grep -q "\b$sym\b" "$modsymfile" && continue
 		local objname=$(findObjWithSymbol "$sym" "$srcfile")
-		if [[ "$objname" == "" ]]; then
-			logErr "Can't find symbol: $sym"
-			exit 1
-		fi
 		if [[ $objname != "vmlinux" ]]; then
 			local objpath=`find $SYMBOLS_DIR -type f -name "$objname"`
 			objpath=${objpath#*$SYMBOLS_DIR/}.ko
@@ -94,7 +90,7 @@ findSymbolIndex()
 	local objname=${rel%%.*}
 	local symbol=${rel#*.}
 	index=0
-	[[ "$objname" != "vmlinux" ]] && return
+	[[ "$objname" != "vmlinux" ]] && return $NO_ERROR
 	local mapfile="$SYSTEM_MAP"
 	local count=`grep " $symbol$" "$mapfile" | wc -l`
 	[[ $count == "1" ]] && return
@@ -107,11 +103,11 @@ findSymbolIndex()
 		local found=`nm "$kofile" | grep "$sym"`
 		if [[ "$found" != "" ]]; then
 			((occure++))
-			[[ $occure == "2" ]] && return
+			[[ $occure == "2" ]] && return $NO_ERROR
 		fi
 	done <<< "$maches"
-	logErr "Can't find index for symbol '$symbol'"
-	exit 1
+	logErr "Can't find index for symbol '$symbol'. This feature is not yet fully supported by DEKU"
+	exit $ERROR_CANT_FIND_SYM_INDEX
 }
 
 main()
@@ -119,14 +115,13 @@ main()
 	local modules
 	local prevmod=$(modulesList)
 	bash generate_module.sh
-	if [ $? -ne 0 ]; then
-		logFatal "Failed"
-		exit 1
-	fi
+	local rc=$?
+	[[ $rc != 0 ]] && exit $rc
+
 	modules=$(findModifiedModules "$prevmod")
 	if [ -z "$modules" ]; then
 		logInfo "No changes detected since last run"
-		exit
+		exit $NO_ERROR
 	fi
 
 	while read -r module; do
@@ -153,9 +148,8 @@ main()
 			args+=("$kofile")
 			logDebug "Make livepatch module"
 			./mklivepatch ${args[@]}
-			if [ $? != 0 ]; then
-				logFatal "Abort!"
-				exit 1
+			if [[ $? != 0 ]]; then
+				exit $ERROR_GENERATE_LIVEPATCH_MODULE
 			fi
 		else
 			logDebug "Module does not need to adjust relocations"
@@ -165,4 +159,3 @@ main()
 }
 
 main $@
-exit $?

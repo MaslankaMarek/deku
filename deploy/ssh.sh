@@ -63,9 +63,9 @@ main()
 	SCPPARAMS="$options $extraparams $scpport"
 	unset SSH_AUTH_SOCK
 
-	[[ "$1" == "--getids" ]] && { getLoadedDEKUModules; return; }
-	[[ "$1" == "--kernel-release" ]] && { getKernelRelease; return; }
-	[[ "$1" == "--kernel-version" ]] && { getKernelVersion; return; }
+	[[ "$1" == "--getids" ]] && { getLoadedDEKUModules; return $NO_ERROR; }
+	[[ "$1" == "--kernel-release" ]] && { getKernelRelease; return $NO_ERROR; }
+	[[ "$1" == "--kernel-version" ]] && { getKernelVersion; return $NO_ERROR; }
 
 	local files=$@
 	local disablemod=
@@ -102,18 +102,18 @@ main()
 			insmod+="res=\`insmod $dstdir/\$module 2>&1\`\n"
 			insmod+="if [ \$? != 0 ]; then\n"
 			insmod+="\techo \"Failed to load $originname. Reason: \$res\"\n"
-			insmod+="\texit 1\n"
+			insmod+="\texit $ERROR_LOAD_MODULE\n"
 			insmod+="fi\n"
 			insmod+="for i in \`seq 1 25\`; do\n"
 			insmod+="\tgrep -q $modulename /proc/modules && break\n"
-			insmod+="\t[ \$? -ne 0 ] && { echo \"Failed to load $modulename\"; exit 1; }\n"
+			insmod+="\t[ \$? -ne 0 ] && { echo \"Failed to load $modulename\"; exit $ERROR_LOAD_MODULE; }\n"
 			insmod+="\techo \"$modulename is still loading...\"\n"
 			insmod+="\tsleep 0.05\ndone\n"
-			insmod+="for i in \`seq 1 25\`; do\n"
+			insmod+="for i in \`seq 1 275\`; do\n"
 			insmod+="\t[ \$(cat $modulesys/transition) = \"0\" ] && break\n"
 			insmod+="\techo \"$originname is still transitioning...\"\n"
-			insmod+="\tsleep 0.2\ndone\n"
-			insmod+="[ \$(cat $modulesys/transition) != \"0\" ] && { echo \"Failed to apply $modulename \$i\"; exit 1; }\n"
+			insmod+="\tsleep 0.52\ndone\n"
+			insmod+="[ \$(cat $modulesys/transition) != \"0\" ] && { echo \"Failed to apply $modulename \$i\"; exit $ERROR_APPLY_KLP; }\n"
 			insmod+="echo \"$originname loaded\"\n"
 		fi
 	done
@@ -125,8 +125,8 @@ main()
 	scp $SCPPARAMS $files $workdir/$DEKU_RELOAD_SCRIPT $host:$dstdir/
 	logInfo "Loading..."
 	remoteSh sh "$dstdir/$DEKU_RELOAD_SCRIPT 2>&1"
-	local res=$?
-	if [ $res == 0 ]; then
+	local rc=$?
+	if [ $rc == 0 ]; then
 		echo -e "${GREEN}Changes applied successfully!${NC}"
 	else
 		logFatal "----------------------------------------"
@@ -134,7 +134,7 @@ main()
 		logFatal "----------------------------------------"
 		logFatal "Apply changes failed!\nCheck system logs on the device to get more informations"
 	fi
-	return $res
+	return $rc
 }
 
 main $@

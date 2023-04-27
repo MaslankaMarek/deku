@@ -12,7 +12,7 @@ validateKernels()
 	local mismatch=""
 	[[ $localrelease != *"$kernelrelease"* ]] && mismatch=" release:$kernelrelease"
 	[[ $localversion != *"$kernelversion"* ]] && mismatch+=" version:$kernelversion"
-	[[ $mismatch == "" ]] && return
+	[[ $mismatch == "" ]] && return 0
 	logErr "Kernel image mismatch:$mismatch."
 	logInfo "Kernel on the device: $kernelrelease $kernelversion"
 	logInfo "Kernel on the host: $localrelease $localversion"
@@ -22,14 +22,14 @@ validateKernels()
 main()
 {
 	if [ "$DEPLOY_TYPE" == "" ] || [ "$DEPLOY_PARAMS" == "" ]; then
-		logWarn "Please setup connection parameters to target device"
-		exit
+		logWarn "Please set the connection parameters to the target device"
+		exit $ERROR_NO_DEPLOY_PARAMS
 	fi
 	validateKernels
 
 	bash $COMMANDS_DIR/build.sh
-	local res=$?
-	[ $res != 0 ] && exit 1
+	local rc=$?
+	[ $rc != $NO_ERROR ] && exit $rc
 
 	# find modules need to upload and unload
 	local modulestoupload=()
@@ -58,16 +58,13 @@ main()
 
 	if ((${#modulestoupload[@]} == 0)) && ((${#modulestounload[@]} == 0)); then
 		echo "No modules need to upload"
-		return
+		return $NO_ERROR
 	fi
 
 	modulestoupload=${modulestoupload[@]}
 	modulestounload=${modulestounload[@]}
 	bash "deploy/$DEPLOY_TYPE.sh" $modulestoupload $modulestounload
-	res=$?
-	[ $res != 0 ] && echo -e "${RED}Failed!${NC}"
-	return $res
+	return $?
 }
 
 main $@
-exit $?

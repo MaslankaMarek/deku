@@ -64,7 +64,7 @@ findObjWithSymbol()
 	local srcfile=$2
 
 	local out=`grep -lr "\b$sym\b" $SYMBOLS_DIR`
-	[ "$out" != "" ] && { echo $(filenameNoExt "$out"); return; }
+	[ "$out" != "" ] && { echo $(filenameNoExt "$out"); return $NO_ERROR; }
 
 	local srcpath=$SOURCE_DIR/
 	local modulespath=$MODULES_DIR/
@@ -80,15 +80,15 @@ findObjWithSymbol()
 			done <<< "$files"
 
 			out=`grep -lr "\b$sym\b" $SYMBOLS_DIR`
-			[ "$out" != "" ] && { echo $(filenameNoExt "$out"); return; }
+			[ "$out" != "" ] && { echo $(filenameNoExt "$out"); return $NO_ERROR; }
 		fi
 		[ -f "$srcpath/Kconfig" ] && break
 		srcpath+="/.."
 		modulespath+="/.."
 	done
-	grep -q "\b$sym\b" "$SYSTEM_MAP" && { echo vmlinux; return; }
+	grep -q "\b$sym\b" "$SYSTEM_MAP" && { echo vmlinux; return $NO_ERROR; }
 
-	# not found
+	exit $ERROR_CANT_FIND_SYMBOL
 }
 export -f findObjWithSymbol
 
