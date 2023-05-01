@@ -292,7 +292,11 @@ generateDiffObject()
 	done <<< "$newfun"
 
 	./elfutils --extract -f "$moduledir/$filename.o" -o "$moduledir/patch.o" $extractsyms
-	if [[ $? != 0 ]]; then
+	local rc=$?
+	if [[ $rc == $ERROR_UNSUPPORTED_READ_MOSTLY ]]; then
+		exit $ERROR_UNSUPPORTED_READ_MOSTLY
+	fi
+	if [[ $rc != 0 ]]; then
 		logErr "Failed to extract modified symbols for $(<$moduledir/$FILE_SRC_PATH)"
 		exit $ERROR_EXTRACT_SYMBOLS
 	fi

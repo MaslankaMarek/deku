@@ -24,6 +24,8 @@
 #define MAX_DISASS_LINE_LEN 256
 #endif
 
+#define ERROR_UNSUPPORTED_READ_MOSTLY 30
+
 static bool ShowDebugLog = 0;
 #define LOG_ERR(fmt, ...)												\
 	do																	\
@@ -887,6 +889,17 @@ static size_t copySymbol(Elf *elf, Elf *outElf, size_t index, bool copySec)
 	}
 	else // mark symbol as "external"
 	{
+		if (symType == STT_OBJECT && oldSym.st_name != 0)
+		{
+			if (strstr(getSectionName(elf, oldSym.st_shndx), ".read_mostly"))
+			{
+				fprintf(stderr, "ERROR (%s:%d): Changes to the source code " \
+						"affects the %s variable marked with the " \
+						"__read_mostly macro. This is not yet supported by " \
+						"DEKU.\n", __FILE__, __LINE__, Symbols[index]->name);
+				exit(ERROR_UNSUPPORTED_READ_MOSTLY);
+			}
+		}
 		if (oldSym.st_shndx > 0 && oldSym.st_shndx < SectionsCount)
 			newSym.st_shndx = 0;
 		newSym.st_size = 0;

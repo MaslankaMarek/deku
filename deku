@@ -54,8 +54,8 @@ exportVars()
 
 checkIfUpdated()
 {
-	[[ ! -f "$CONFIG_FILE" ]] && return
-	[[ "$WORKDIR_HASH" == "$(generateDEKUHash)" ]] && return
+	[[ ! -f "$CONFIG_FILE" ]] && return $NO_ERROR
+	[[ "$WORKDIR_HASH" == "$(generateDEKUHash)" ]] && return $NO_ERROR
 
 	logInfo "DEKU has been updated. Running the 'make' command to rebuild the project..."
 	make > /dev/null || exit 1
@@ -91,25 +91,31 @@ main()
 			continue
 		fi
 		if [[ -f "$COMMANDS_DIR/$opt.sh" ]]; then
-			local ret=0
+			local rc=$NO_ERROR
 			if [[ "$opt" == "init" ]]; then
 				bash "$COMMANDS_DIR/$opt.sh" "$@"
-				ret=$?
-				[[ "$ret" != 0 ]] && exit $ret
-				bash ${0} -w "$workdir" sync
-				ret=$?
-				[[ "$ret" != 0 ]] && exit $ret
-				logInfo "Init done"
+				rc=$?
+				if [[ "$rc" == $NO_ERROR ]]; then
+					bash ${0} -w "$workdir" sync
+					rc=$?
+					if [[ "$rc" == $NO_ERROR ]]; then
+						logInfo "Init done"
+					fi
+				fi
 			else
 				if [ ! -d "$workdir" ]; then
 					logInfo "Can't find $workdir directory"
 					logInfo "The project probably has not been initiated"
-					exit ENOTDIR
+					rc=$ERROR_NO_WORKDIR
+				else
+					bash "$COMMANDS_DIR/$opt.sh"
+					rc=$?
 				fi
-				bash "$COMMANDS_DIR/$opt.sh"
-				ret=$?
 			fi
-			exit $ret
+			if [ $rc != $NO_ERROR ]; then
+				echo -e "${RED}Fail!${NC}"
+			fi
+			exit $rc
 		fi
 	done
 
