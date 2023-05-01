@@ -21,10 +21,10 @@ The DEKU is a utility that allows quick apply changes from Linux kernel source c
 ***
 _**For ChromiumOS developers**_  
  - `libelf` is already installed in cros sdk
- - To enable `CONFIG_LIVEPATCH` flag the following commands can be used:
+ - To enable `CONFIG_LIVEPATCH` flag the kernel can be built with the `livepatch`
+ use flag
   ```
-~/chromiumos/src/third_party/kernel/v5.10 $ scripts/config --file chromeos/config/chromeos/x86_64/common.config -e KALLSYMS_ALL
-~/chromiumos/src/third_party/kernel/v5.10 $ scripts/config --file chromeos/config/chromeos/x86_64/common.config -e LIVEPATCH
+  USE=livepatch emerge-$BOARD chromeos-kernel-$VERSION
  ```
 ***
 Build and upload kernel on the DUT
