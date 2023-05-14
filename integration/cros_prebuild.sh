@@ -19,12 +19,17 @@ if [[ $afdo != "" ]]; then
 		xz --decompress $dstdir/$afdofile.xz
 		llvm-profdata merge \
 			-sample \
+			-extbinary \
+			-output="$dstdir/$afdofile.extbinary.afdo" \
+			"$dstdir/$afdofile"
+		# Generate compbinary format for legacy compatibility
+		llvm-profdata merge \
+			-sample \
 			-compbinary \
 			-output="$dstdir/$afdofile.compbinary.afdo" \
 			"$dstdir/$afdofile"
 	else
-		logErr "Can't find afdo profile file ($afdopath)"
-		exit $ERROR_CANT_FIND_AFDO
+		logWarn "Can't find afdo profile file ($afdopath)"
 	fi
 else
 	logInfo "Can't find afdo profile file"
