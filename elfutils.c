@@ -708,6 +708,34 @@ static Elf *createNewElf(const char *outFile)
 	return elf;
 }
 
+void checkStaticKeys(Elf *elf, bool *symToCopy)
+{
+	Elf_Scn *scn = getSectionByName(elf, "__jump_table");
+	if (scn == NULL)
+		return;
+	Elf_Scn *relScn = getRelForSectionIndex(elf, elf_ndxscn(scn));
+	if (relScn == NULL)
+		LOG_ERR("Can't find relocation section for __jump_table");
+
+	GElf_Rela rela;
+	GElf_Shdr shdr;
+	Elf_Data *data = elf_getdata(relScn, NULL);
+	gelf_getshdr(relScn, &shdr);
+	size_t cnt = shdr.sh_size / shdr.sh_entsize;
+	for (size_t i = 0; i < cnt; i+=3)
+	{
+		gelf_getrela(data, i, &rela);
+		Symbol *symbol = getSymbolForRelocation(rela);
+		if (symToCopy[symbol->index])
+		{
+			gelf_getrela(data, i + 2, &rela);
+			const char *keyName = Symbols[ELF64_R_SYM(rela.r_info)]->name;
+			LOG_INFO("The '%s' function uses static key `%s` that is not yet "
+					 "supported by DEKU.", symbol->name, keyName);
+		}
+	}
+}
+
 static Elf_Scn *copySection(Elf *elf, Elf *outElf, Elf64_Section index, bool copyData)
 {
 	if (CopiedScnMap[index] != NULL)
@@ -1039,6 +1067,8 @@ static void copySymbols(Elf *elf, Elf *outElf, char **symbols)
 			copySectionWithRel(elf, outElf, index, NULL);
 		}
 	}
+	checkStaticKeys(elf, symToCopy);
+
 	// TODO: Fix file path in string sections
 
 	sortSymtab(outElf);
