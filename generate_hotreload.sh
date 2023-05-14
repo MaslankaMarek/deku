@@ -34,8 +34,6 @@ getSymbolsToRelocate()
 	local originobj=$2
 	local symvers=$3
 	local ignoresymbols=(
-						"__func__.0"
-						"__func__.1"
 						"_printk"
 						)
 	local syms=()
@@ -103,9 +101,17 @@ findSymbolIndex()
 		local found=`nm "$kofile" | grep "$sym"`
 		if [[ "$found" != "" ]]; then
 			((occure++))
-			[[ $occure == "2" ]] && return $NO_ERROR
+			[[ $occure == "10" ]] && return $NO_ERROR
 		fi
 	done <<< "$maches"
+	local filename=$(<`dirname $kofile`/$FILE_SRC_PATH)
+	filename=`basename $filename`
+	index=`readelf -a "$BUILD_DIR/vmlinux" | \
+		grep -e "\b$filename\b" -e "\b$symbol\b" | \
+		grep -n $filename | \
+		head -1 | \
+		cut -f1 -d:`
+	[[ "$index" != "" ]] && return $NO_ERROR
 	logErr "Can't find index for symbol '$symbol'. This feature is not yet fully supported by DEKU"
 	exit $ERROR_CANT_FIND_SYM_INDEX
 }

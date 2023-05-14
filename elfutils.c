@@ -297,6 +297,9 @@ static Symbol *getSymbolForRelocation(const GElf_Rela rela)
 		return Symbols[symIndex];
 	if (Symbols[symIndex]->st_size > 0)
 		return Symbols[symIndex];
+	if (ELF64_ST_TYPE(Symbols[symIndex]->st_info) == STT_FUNC ||
+		ELF64_ST_TYPE(Symbols[symIndex]->st_info) == STT_OBJECT)
+		return Symbols[symIndex];
 
 	size_t secIndex = Symbols[symIndex]->secIndex;
 	Elf64_Sxword addend = rela.r_addend;
@@ -310,7 +313,9 @@ static Symbol *getSymbolForRelocation(const GElf_Rela rela)
 
 	for (Symbol **s = Symbols; *s != NULL; s++)
 	{
-		if (s[0]->secIndex == secIndex && s[0]->st_value == (size_t)addend && s[0]->st_size > 0)
+		if (s[0]->index != symIndex && s[0]->secIndex == secIndex &&
+			(size_t)addend >= s[0]->st_value &&
+			(size_t)addend < s[0]->st_value + s[0]->st_size)
 			return s[0];
 	}
 
@@ -945,13 +950,15 @@ static void copyRelSection(Elf *elf, Elf *outElf, Elf64_Section index, size_t re
 		size_t newSymIndex;
 		size_t symIndex = ELF64_R_SYM(rela.r_info);
 		GElf_Shdr shdr = getSectionHeader(elf, Symbols[symIndex]->secIndex);
-		if (shdr.sh_flags & SHF_STRINGS)
+		const char *secName = getSectionName(elf, Symbols[symIndex]->secIndex);
+		if (shdr.sh_flags & SHF_STRINGS ||
+			strstr(secName, ".rodata.__func__") == secName)
 		{
 			newSymIndex = copySymbol(elf, outElf, symIndex, true);
 		}
 		else
 		{
-			Symbol *sym = getSymbolForRelocation(rela);
+			Symbol *sym = fromSym == NULL ? Symbols[symIndex] : getSymbolForRelocation(rela);
 			bool isFuncOrVar = Symbols[sym->index]->isFun || Symbols[sym->index]->isVar;
 			bool copySec = fromSym == NULL ? true : !isFuncOrVar;
 			newSymIndex = copySymbol(elf, outElf, sym->index, copySec);
