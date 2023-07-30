@@ -80,14 +80,22 @@ prepareToBuild()
 cmdBuildFile()
 {
 	local srcfile=$1
+	local -n cmdarray=$2
 	local file="${srcfile##*/}"
 	local dir=`dirname "$srcfile"`
 	local cmdfile="$BUILD_DIR/$dir/.${file/.c/.o.cmd}"
 	[[ ! -f $cmdfile ]] && return
 	local skipparam=("-o")
+
 	local newcmd=()
 	local cmd=`head -n 1 $cmdfile`
 	cmd="${cmd#*=}"
+	local extracmd=
+	if [[ "$cmd" == *";"* ]]; then
+		extracmd="${cmd#*;}"
+		cmd="${cmd%%;*}"
+	fi
+
 	local skiparg=0
 	for opt in $cmd; do
 		[[ $skiparg != 0 ]] && { skiparg=0; continue; }
@@ -102,7 +110,8 @@ cmdBuildFile()
 	done
 	unset 'newcmd[${#newcmd[@]}-1]'
 	newcmd+=("-I$SOURCE_DIR/$dir")
-	echo "${newcmd[*]}"
+
+	cmdarray=("${newcmd[*]}" "$extracmd")
 }
 
 buildFile()
@@ -111,17 +120,37 @@ buildFile()
 	local compilefile=$2
 	local outfile=$3
 	local separatesections=1
-	cmd=$(cmdBuildFile "$srcfile")
+
+	local cmds=()
+	cmdBuildFile "$srcfile" cmds
+	local cmd=${cmds[0]}
+	local extracmd=${cmds[1]}
+
 	[[ $cmd == "" ]] && { logInfo "Can't find command to build $srcfile"; return 1; }
 	[[ $outfile != /* ]] && outfile="`pwd`/$outfile"
 	[[ $compilefile != /* ]] && compilefile="`pwd`/$compilefile"
 	[[ $separatesections != 0 ]] && cmd+=" -ffunction-sections -fdata-sections"
 	cmd+=" -o $outfile $compilefile"
+
 	cd "$LINUX_HEADERS"
 	eval "$cmd"
 	local rc=$?
 	cd $OLDPWD
-	[[ $rc != 0 ]] && logInfo "Failed to build $srcfile"
+
+	if [[ $rc != 0 ]]; then
+		logInfo "Failed to build $srcfile"
+		return $rc
+	fi
+
+	if [[ "$extracmd" ]]; then
+		extracmd=`echo "$extracmd" | xargs`
+		if [[ "$extracmd" == "./tools/objtool/objtool"* && "$extracmd" == *".o" ]]; then
+			logErr "Kernel configurations with the CONFIG_OBJTOOL for stack validation are not supported yet."
+		else
+			logErr "Can't parse additional command to build file ($extracmd)"
+		fi
+	fi
+
 	return $rc
 }
 
