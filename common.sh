@@ -63,6 +63,10 @@ findObjWithSymbol()
 	local sym=$1
 	local srcfile=$2
 
+	#TODO: For module objects try to find symbol in the same module
+	#TODO: Consider checking type of the symbol
+	grep -q "\b$sym\b" "$SYSTEM_MAP" && { echo vmlinux; return $NO_ERROR; }
+
 	local out=`grep -lr "\b$sym\b" $SYMBOLS_DIR`
 	[ "$out" != "" ] && { echo $(filenameNoExt "$out"); return $NO_ERROR; }
 
@@ -86,7 +90,6 @@ findObjWithSymbol()
 		srcpath+="/.."
 		modulespath+="/.."
 	done
-	grep -q "\b$sym\b" "$SYSTEM_MAP" && { echo vmlinux; return $NO_ERROR; }
 
 	exit $ERROR_CANT_FIND_SYMBOL
 }
