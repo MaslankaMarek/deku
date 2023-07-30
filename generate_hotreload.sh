@@ -76,6 +76,10 @@ relocations()
 				logErr "A relocation is needed for the '$sym' function, which is located in the kernel module. This is not yet supported by DEKU."
 			fi
 		fi
+		if [[ $(<$moduledir/$FILE_OBJECT) == "vmlinux" && $objname != "vmlinux" ]]; then
+			logErr "The symbol '$sym' refers to the module '$objname' module. This is not yet supported by DEKU."
+			exit $ERROR_UNSUPPORTED_REF_SYM_FROM_MODULE
+		fi
 		echo "$objname.$sym"
 	done <<< "$syms"
 }
@@ -107,7 +111,7 @@ findSymbolIndex()
 	local filename=$(<`dirname $kofile`/$FILE_SRC_PATH)
 	filename=`basename $filename`
 	index=`readelf -a "$BUILD_DIR/vmlinux" | \
-		grep -e "\b$filename\b" -e "\b$symbol\b" | \
+		grep -e "\b$filename\b" -e "\b$symbol$" | \
 		grep -n $filename | \
 		head -1 | \
 		cut -f1 -d:`
@@ -136,7 +140,10 @@ main()
 		local modsymfile="$moduledir/$MOD_SYMBOLS_FILE"
 		local kofile="$moduledir/$module.ko"
 		local objname=$(<$moduledir/$FILE_OBJECT)
-		local relocs=$(relocations "$moduledir" $module)
+		relocs=$(relocations "$moduledir" $module)
+		local rc=${PIPESTATUS[0]}
+		[[ $rc != 0 ]] && exit $rc
+
 		logDebug "Processing $module..."
 		if [[ "$relocs" != "" ]]; then
 			while read -r sym; do
