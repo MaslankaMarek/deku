@@ -159,7 +159,7 @@ buildFile()
 	if [[ "$extracmd" ]]; then
 		extracmd=`echo "$extracmd" | xargs`
 		if [[ "$extracmd" == "./tools/objtool/objtool"* && "$extracmd" == *".o" ]]; then
-			logErr "Kernel configurations with the CONFIG_OBJTOOL for stack validation are not supported yet."
+			logDebug "Kernel configurations with the CONFIG_OBJTOOL for stack validation are not supported yet."
 		else
 			logErr "Can't parse additional command to build file ($extracmd)"
 		fi
@@ -243,6 +243,7 @@ generateDiffObject()
 	local out=`./elfutils --diff -a "$moduledir/_$filename.o" -b "$moduledir/$filename.o"`
 	local tmpmodfun=`sed -n "s/^Modified function: \(.\+\)/\1/p" <<< "$out"`
 	local newfun=`sed -n "s/^New function: \(.\+\)/\1/p" <<< "$out"`
+	local newvar=`sed -n "s/^New variable: \(.\+\)/\1/p" <<< "$out"`
 	local modfun=()
 
 	while read -r fun
@@ -250,12 +251,12 @@ generateDiffObject()
 		[[ $fun == "" ]] && continue
 		local initfunc=`objdump -t -j ".init.text" "$moduledir/_$filename.o" 2>/dev/null | grep "\b$fun\b"`
 		if [[ "$initfunc" != "" ]]; then
-			logInfo "Detected modifications in the init function '$fun'. Modifications from this function will not be applied."
+			logInfo "The init function '$fun' has been modified. Any changes made to this function will not be applied."
 			continue
 		fi
 		local initfunc=`objdump -t -j ".exit.text" "$moduledir/_$filename.o" 2>/dev/null | grep "\b$fun\b"`
 		if [[ "$initfunc" != "" ]]; then
-			logInfo "Detected modifications in the exit function '$fun'. Modifications from this function will not be applied."
+			logInfo "The exit function '$fun' has been modified. Any changes made to this function will not be applied."
 			continue
 		fi
 		if [[ $fun == *".cold" ]]; then
@@ -279,8 +280,7 @@ generateDiffObject()
 		if [[ "$objpath" == "vmlinux" ]]; then
 			local count=`nm "$BUILD_DIR/$objpath" | grep "\b$fun\b" | wc -l`
 			if [[ $count > 1 ]]; then
-				logErr "Can't apply changes to '$file' because there are multiple functions with the '$fun' name in the kernel image. This is not yet supported by DEKU."
-				exit $ERROR_NO_SUPPORT_MULTI_FUNC
+				logWarn "Found multiple instances of '$fun' from the '$file' in the kernel image. This case is not yet fully supported by DEKU."
 			fi
 		fi
 
@@ -289,7 +289,7 @@ generateDiffObject()
 
 	printf "%s\n" "${modfun[@]}" > "$moduledir/$MOD_SYMBOLS_FILE"
 
-	[[ "$newfun" == "" && ${#modfun[@]} == 0 ]] && return 0
+	[[ "$newfun" == "" && ${#modfun[@]} == 0 && "$newvar" == "" ]] && return 0
 
 	local originfuncs=`nm -C -f posix "$BUILD_DIR/${file%.*}.o" | grep -i " t " | cut -d ' ' -f 1`
 	local extractsyms=""
@@ -333,6 +333,12 @@ generateDiffObject()
 		[[ "$fun" == "" ]] && continue
 		extractsyms+="-s $fun "
 	done <<< "$newfun"
+
+	while read -r var;
+	do
+		[[ "$var" == "" ]] && continue
+		extractsyms+="-s $var "
+	done <<< "$newvar"
 
 	./elfutils --extract -f "$moduledir/$filename.o" -o "$moduledir/patch.o" $extractsyms
 	local rc=$?

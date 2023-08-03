@@ -23,7 +23,7 @@ findModifiedModules()
 	local prevmod=$1
 	local newmod=$(modulesList)
 	while read -r module; do
-		[[ ! " ${prevmod[*]} " =~ " $module " ]] && results+=(${module%% *})
+		[[ ! "${prevmod[*]}" =~ "$module" ]] && results+=(${module%% *})
 	done <<< "$newmod"
 	printf "%s\n" "${results[@]}"
 }
@@ -96,7 +96,7 @@ findSymbolIndex()
 	local mapfile="$SYSTEM_MAP"
 	local count=`grep " $symbol$" "$mapfile" | wc -l`
 	[[ $count == "1" ]] && return
-	logInfo "Found $count occurrences of the symbol '$symbol'"
+	logDebug "Found $count occurrences of the symbol '$symbol'"
 	local maches=`grep -A 10 -B 10 " $symbol$" "$mapfile" | cut -d " " -f 3`
 	index=1
 	local occure=0

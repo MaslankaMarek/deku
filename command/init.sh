@@ -18,47 +18,12 @@ isKernelSroucesDir()
 	return 0
 }
 
-checkKernelBuildDir()
+isKlpEnabled()
 {
 	local dir=$1
-	local workdir=$2
 
-	local usellvm=
-	isLLVMUsed "$dir" && usellvm=1
-
-	local tmpdir=$(mktemp -d init-XXX --tmpdir="$workdir")
-	cat > "$tmpdir/test.c" <<- EOF
-	#include <linux/kernel.h>
-	#include <linux/module.h>
-	#include <linux/livepatch.h>
-	static int deku_init(void)
-	{
-		return klp_enable_patch(NULL);
-	}
-	static void deku_exit(void)
-	{
-	}
-	module_init(deku_init);
-	module_exit(deku_exit);
-	MODULE_INFO(livepatch, "Y");
-	MODULE_LICENSE("GPL");
-	EOF
-
-	echo "obj-m += test.o" > "$tmpdir/Makefile"
-	echo "all:" >> "$tmpdir/Makefile"
-	echo "	make -C $1 M=\$(PWD)/$tmpdir modules" >> "$tmpdir/Makefile"
-	out=`make -C $tmpdir LLVM=$usellvm 2>&1`
-	local rc=$?
-	rm -rf $tmpdir
-	if [ $rc != 0 ]; then
-		local kplerr=`echo "$out" | grep "klp_enable_patch"`
-		if [ -n "$kplerr" ]; then
-			return $ERROR_KLP_IS_NOT_ENABLED
-		else
-			logErr "$out"
-			return $ERROR_UNKNOWN
-		fi
-	fi
+	grep -q "CONFIG_LIVEPATCH" "$dir/.config" || return $ERROR_KLP_IS_NOT_ENABLED
+	grep -q "klp_enable_patch" "$dir/System.map" || return $ERROR_KLP_IS_NOT_ENABLED
 	return $NO_ERROR
 }
 
@@ -88,14 +53,17 @@ main()
 {
 	local builddir=""
 	local sourcesdir="."
-	local deploytype=""
+	local deploytype="ssh"
 	local deployparams=""
 	local board=""
 	local prebuild=""
 	local postbuild=""
-	local kernsrcinstall=""
+	local kernignorecrossrcinstall=""
+	local ignorecros=""
 
-	if ! options=$(getopt -u -o b:s:d:p:w: -l builddir:,sourcesdir:,deploytype:,deployparams:,srcinstdir:,prebuild:,postbuild:,board:,workdir: -- "$@")
+	if ! options=$(getopt -u -o b:s:d:p:w: -l builddir:,sourcesdir:,deploytype:,\
+				   deployparams:,src_inst_dir:,prebuild:,postbuild:,board:,workdir: \
+				   target:,ssh_options:,ignore_cros: -- "$@")
 	then
 		exit 1
 	fi
@@ -106,19 +74,24 @@ main()
 		local value="$2"
 		if [[ "$opt" =~ ^\-\-.+=.+ ]]; then
 			value=${opt#*=}
-			opt=${opt%=*}
+			opt=${opt%%=*}
+		else
+			shift
 		fi
 
 		case $opt in
-		-b|--builddir) builddir="$value" ; shift;;
-		-s|--sourcesdir) sourcesdir="$value" ; shift;;
-		-d|--deploytype) deploytype="$value" ; shift;;
-		-p|--deployparams) deployparams="$value" ; shift;;
-		-w|--workdir) workdir="$value" ; shift;;
+		-b|--builddir) builddir="$value" ;;
+		-s|--sourcesdir) sourcesdir="$value" ;;
+		-d|--deploytype) deploytype="$value" ;;
+		-p|--deployparams) deployparams="$value" ;;
+		-w|--workdir) workdir="$value" ;;
+		--ssh_options) sshoptions="$value" ;;
 		--board) board="$value" ;;
-		--srcinstdir) kernsrcinstall="$value" ;;
+		--src_inst_dir) kernsrcinstall="$value" ;;
 		--prebuild) prebuild="$value" ;;
 		--postbuild) postbuild="$value" ;;
+		--target) target="$value" ;;
+		--ignore_cros) ignorecros="$value" ;;
 		(--) shift; break;;
 		(-*) logInfo "$0: Error - Unrecognized option $opt" 1>&2; exit 1;;
 		(*) break;;
@@ -126,11 +99,17 @@ main()
 		shift
 	done
 
-	if [[ "$board" ]]; then
-		if [[ "$CHROMEOS_CHROOT" != 1 ]]; then
-			logInfo "--board parameter can be only used inside CrOS SDK"
+	if [[ "$ignorecros" == "" && -e /etc/cros_chroot_version ]]; then
+		if [[ "$board" == "" ]]; then
+			logErr "Please specify the Chromebook board name using: $0 --board=<BOARD_NAME> ... syntax"
 			exit $ERROR_NO_BOARD_PARAM
 		fi
+
+		if [[ ! -d "/build/$board" ]]; then
+			logErr "Please setup the board using \"setup_board\" command"
+			exit $ERROR_BOARD_NOT_EXISTS
+		fi
+
 		local kerndir=`find /build/$board/var/db/pkg/sys-kernel/ -type f -name "chromeos-kernel-*"`
 		kerndir=`basename $kerndir`
 		kerndir=${kerndir%-9999*}
@@ -147,7 +126,22 @@ main()
 		fi
 		[[ "$workdir" == "" ]] && workdir="workdir_$board"
 		CONFIG_FILE="$workdir/config"
-		deploytype="ssh"
+
+		if [[ ! -f "$workdir/testing_rsa" ]]; then
+			mkdir -p "$workdir"
+			local GCLIENT_ROOT=~/chromiumos
+			cp -f "${GCLIENT_ROOT}/src/third_party/chromiumos-overlay/chromeos-base/chromeos-ssh-testkeys/files/testing_rsa" "$workdir"
+			chmod 0400 "$workdir/testing_rsa"
+		fi
+
+		if [[ "$sshoptions" == "" ]]; then
+			sshoptions=" -o IdentityFile=$workdir/testing_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -q"
+		fi
+		[[ ! " $target " =~ " @ " ]] && target="root@$target"
+		deployparams="$target $sshoptions"
+	elif [[ "$board" != "" ]]; then
+		logInfo "--board parameter can be only used inside CrOS SDK"
+		exit $ERROR_UNKNOWN
 	fi
 
 	builddir=${builddir%/}
@@ -171,19 +165,21 @@ main()
 
 	[ "$(git --version)" ] || { logErr "\"git\" could not be found. Please install \"git\""; exit 2; }
 
-	logInfo "Initialize DEKU"
-	logInfo "Sources dir: $sourcesdir"
-	logInfo "Build dir: $builddir"
-	logInfo "Work dir: $workdir"
+	logDebug "Initialize DEKU"
+	logDebug "Sources dir: $sourcesdir"
+	logDebug "Build dir: $builddir"
+	logDebug "Work dir: $workdir"
 
 	if [ -d "$workdir" ]
 	then
-		[ "$(ls -A $workdir)" ] && { logErr "Directory \"$workdir\" is not empty"; exit $ERROR_WORKDIR_EXISTS; }
+		if [[ "$CHROMEOS_CHROOT" != 1 ]]; then
+			[ "$(ls -A $workdir)" ] && { logErr "Directory \"$workdir\" is not empty"; exit $ERROR_WORKDIR_EXISTS; }
+		fi
 	else
 		mkdir -p "$workdir" || { logErr "Failed to create directory \"$workdir\""; exit $?; }
 	fi
 
-	checkKernelBuildDir "$builddir" "$workdir"
+	isKlpEnabled "$builddir"
 	local rc=$?
 	if [[ $rc != $NO_ERROR ]]; then
 		if [[ $rc == $ERROR_KLP_IS_NOT_ENABLED ]]; then
@@ -226,6 +222,12 @@ main()
 		exit $ERROR_INVALID_DEPLOY_TYPE
 	fi
 
+	. ./header.sh
+
+	local hash=
+	[[ -f "$CONFIG_FILE" ]] && hash=`sed -rn "s/^WORKDIR_HASH=([a-f0-9]+)/\1/p" "$CONFIG_FILE"`
+	[[ $hash == "" ]] && hash=$(generateDEKUHash)
+
 	echo "BUILD_DIR=\"$builddir\"" > $CONFIG_FILE
 	echo "SOURCE_DIR=\"$sourcesdir\"" >> $CONFIG_FILE
 	echo "DEPLOY_TYPE=\"$deploytype\"" >> $CONFIG_FILE
@@ -238,7 +240,7 @@ main()
 	[[ "$board" != "" ]] && echo "CROS_BOARD=\"$board\"" >> $CONFIG_FILE
 	[[ "$kernsrcinstall" != "" ]] && echo "KERN_SRC_INSTALL_DIR=\"$kernsrcinstall\"" >> $CONFIG_FILE
 	isLLVMUsed "$linuxheaders" && echo "USE_LLVM=\"LLVM=1\"" >> $CONFIG_FILE
-	echo "WORKDIR_HASH=$(generateDEKUHash)" >> $CONFIG_FILE
+	echo "WORKDIR_HASH=$hash" >> $CONFIG_FILE
 
 	if [[ "$kernsrcinstall" == "" ]]; then
 		git --work-tree="$sourcesdir" --git-dir="$workdir/.git" \

@@ -627,14 +627,22 @@ static void findModifiedSymbols(Elf *elf, Elf *secondElf)
 				CHECK_ALLOC(bssName);
 				char *dataName = malloc(strlen(name) + 7);
 				CHECK_ALLOC(dataName);
+				char *rodataName = malloc(strlen(name) + 9);
+				CHECK_ALLOC(rodataName);
+				snprintf(bssName, strlen(name) + 6, ".bss.%s", name);
+				snprintf(dataName, strlen(name) + 7, ".data.%s", name);
+				snprintf(rodataName, strlen(name) + 9, ".rodata.%s", name);
 
 				const char *scnName = getSectionName(elf, sym.st_shndx);
-				if (strcmp(scnName, dataName) == 0 ||
-					strcmp(scnName, bssName) == 0 ||
+				if (strcmp(scnName, bssName) == 0 ||
+					strcmp(scnName, dataName) == 0 ||
+					strcmp(scnName, rodataName) == 0 ||
+					strcmp(scnName, ".bss") == 0 ||
 					strcmp(scnName, ".data") == 0 ||
-					strcmp(scnName, ".bss") == 0)
+					strcmp(scnName, ".rodata") == 0)
 					printf("New variable: %s\n", name);
 
+				free(rodataName);
 				free(dataName);
 				free(bssName);
 			}

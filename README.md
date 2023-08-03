@@ -1,4 +1,4 @@
-# DEKU
+# DExterous Kernel Update [DEKU]
 
 _**For ChromiumOS developers:**_
 

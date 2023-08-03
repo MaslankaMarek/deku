@@ -51,14 +51,6 @@ main()
 	fi
 
 	local options="-o ControlPath=/tmp/sshtest -o ControlMaster=auto"
-	if [[ "$CHROMEOS_CHROOT" == 1 ]]; then
-		if [[ ! -f "$workdir/testing_rsa" ]]; then
-			local GCLIENT_ROOT=~/chromiumos
-			cp -f "${GCLIENT_ROOT}/src/third_party/chromiumos-overlay/chromeos-base/chromeos-ssh-testkeys/files/testing_rsa" "$workdir"
-			chmod 0400 "$workdir/testing_rsa"
-		fi
-		options+=" -o IdentityFile=$workdir/testing_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -q"
-	fi
 	SSHPARAMS="$options $extraparams $host $sshport"
 	SCPPARAMS="$options $extraparams $scpport"
 	unset SSH_AUTH_SOCK

@@ -113,6 +113,11 @@ export -f getKernelReleaseVersion
 # find modified files
 modifiedFiles()
 {
+	if [[ "$CASHED_MODIFIED_FILES" ]]; then
+		echo "$CASHED_MODIFIED_FILES"
+		return
+	fi
+
 	if [ ! "$KERN_SRC_INSTALL_DIR" ]; then
 		git -C "$workdir" diff --name-only | grep -E ".+\.[ch]$"
 		return

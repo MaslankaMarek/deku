@@ -12,35 +12,74 @@ cd "$MAIN_PATH"
 . ./header.sh
 . ./common.sh
 
-showHelp()
+showCrosHelp()
 {
 	echo "DEKU is a tool that allow quick apply changes to the running kernel on the device.
 The changes provided by DEKU lives in the kernel util next reboot.
 
 Usage:
-    deku [OPTIONS...] COMMAND
+    deku --board=<CHROMEBOOK_BOARD_NAME> --target=<DUT_ADDRESS[:PORT]> COMMAND
 Commands list:
-    init   - initialize the DEKU. Create a workdir directory where the configuration file, current state of the kernel source code and kernel image version on the device are stored,
-    build  - build the DEKU modules which are livepatch kernel's modules,
-    sync   - synchronize current state of source code and kernel image. It must be used when the kernel was build by user and flashed to the device,
-    deploy - build and deploy the changes to the device.
+    build                                 build the DEKU modules which are livepatch kernel's modules,
+    deploy                                build and deploy the changes to the device.
 
-'init' command options:
-    -b <PATH_TO_KERNEL_BUILD_DIR> [-s <PATH_TO_KERNEL_SOURCES_DIR>] [--board=<CHROMEBOOK_BOARD_NAME>] -d ssh -p <USER@DUT_ADDRESS[:PORT]>
+Avaiable parameters:
+    --board=<BOARD>                       board name. Meaning of this parameter is the same as in
+                                          the ChromiumOS SDK,
+    --target=<DUT_ADDRESS[:PORT]>         IP address with optional SSH port to the target device.
 
-    -b path to kernel build directory,
-    -s path to kernel sources directory. Use this parameter if initialization process can't find kernel sources dir,
-    --board (Only avaiable inside ChromiumOS SDK) board name. Meaning of this parameter is the same as in the ChromiumOS SDK. If this parameter is used then -b ans -s parameters can be skipped,
-    -d method used to upload and deploy livepatch modules to the DUT. Currently only the 'ssh' is supported,
-    -p parameters for deploy method. For the 'ssh' deploy method, pass the user and DUT address. Optional pass the port number after colon. Additional ssh parameters like '-o' can be passed after space,
-       The given user must be able to load and unload kernel modules. The SSH must be configured to use key-based authentication.
-
-	Example usage:
-		./deku -b /home/user/linux_build -d ssh -p root@192.168.0.100:2233 init
-
-	Example usage when custom key-based authentication key is used for ssh connection:
-		./deku -b /home/user/linux_build -d ssh -p \"root@192.168.0.100 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/key_rsa\" init
+Example usage:
+    ./deku --board=brya --target=192.168.0.100 deploy
 	"
+}
+
+showHelp()
+{
+	if [[ "$CHROMEOS_CHROOT" == 1 ]]; then
+		showCrosHelp
+		return
+	fi
+
+	echo "DEKU is a tool that allow quick apply changes to the running kernel on the device.
+The changes provided by DEKU lives in the kernel util next reboot.
+
+Usage:
+    deku -b <PATH_TO_KERNEL_BUILD_DIR> [--board=<CHROMEBOOK_BOARD_NAME>] --target <USER@DUT_ADDRESS[:PORT]> COMMAND
+Commands list:
+    build                                 build the DEKU modules which are livepatch kernel's modules,
+    deploy                                build and deploy the changes to the device.
+    sync                                  synchronize information about kernel source code.
+                                          Use this command after building the kernel. The use of
+                                          this command is not mandatory, but it will make DEKU work
+                                          more reliably. When the --src_inst_dir parameter is used,
+                                          executing this command after the kernel is built is
+                                          unnecessary as DEKU will run more reliably.
+
+Avaiable parameters:
+    -b, --builddir                        path to kernel build directory,
+    -s, --sourcesdir                      path to kernel sources directory. Use this parameter
+                                          if DEKU can't find kernel sources dir,
+    --board=<BOARD>                       (Only avaiable inside ChromiumOS SDK) board name. Meaning
+                                          of this parameter is the same as in the ChromiumOS SDK.
+                                          If this parameter is used then -b and -s parameters can
+                                          be skipped,
+    --target=<USER@DUT_ADDRESS[:PORT]>    SSH connection parameter to the target device. The given
+                                          user must be able to load and unload kernel modules. The
+                                          SSH must be configured to use key-based authentication.
+                                          Below is an example with this parameter,
+    --ssh_options=<\"-o ...\">              options for SSH. Below is an example with this parameter,
+    --src_inst_dir=<PATH>                 directory with the kernel sources that were installed after
+                                          the kernel was built. Having this directory makes DEKU
+                                          working more reliable. As an alternative to this
+                                          parameter, the 'deku sync' command can be executed after
+                                          the kernel has been built to make DEKU work more reliably,
+
+Example usage:
+    ./deku -b /home/user/linux_build --target=root@192.168.0.100:2200 deploy
+
+Example usage when custom key-based authentication key is used for ssh connection:
+    ./deku -b /home/user/linux_build --target=root@192.168.0.100 --ssh_options=\"-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/key_rsa\" deploy
+    "
 }
 
 exportVars()
@@ -69,27 +108,70 @@ checkIfUpdated()
 	logDebug "Done!"
 }
 
-main()
+getParameter()
 {
-	local workdir="$DEFAULT_WORKDIR"
-	for ((i=1; i<=$#; i++))
+	local param=$1
+	local shortparam=$2
+	for ((i=3; i<=$#; i++))
 	do
-		local opt=${!i}
-		if [[ $opt == "-w" ]]; then
+		opt=${!i}
+		if [[ $opt == "$param="* ]]; then
+			echo "${!i#*=}"
+			return
+		elif [[ $opt == "$param" || $opt == "$shortparam" ]]; then
 			((i++))
-			workdir="${!i}"
-			break
+			echo "${!i}"
+			return
+		elif [[ $opt != *"="* ]]; then
+			((i++))
 		fi
 	done
+}
+
+main()
+{
+	local board=$(getParameter --board -b $@)
+	local ignorecros=$(getParameter --ignore_cros - $@)
+	local workdir=$(getParameter --workdir -w $@)
 
 	# detect whether we're inside a chromeos chroot
-	if [[ -e /etc/cros_chroot_version ]]; then
-		. ./integration/cros_prepare.sh "$@"
-		local rc=$?
-		[[ $rc != 0 ]] && exit $rc
-		[[ "$CROS_WORKDIR" ]] && workdir="$CROS_WORKDIR"
+	if [[ $ignorecros == "" && -e /etc/cros_chroot_version ]]; then
+		export CHROMEOS_CHROOT=1
+		local command=${@: -1}
+		if [[ "$command" == "init" || "$command" == "sync" ]]; then
+			logErr "$command command has been removed for ChromiumOS SDK."
+			logErr "Please look to the README for more information"
+
+			showHelp
+			exit $ERROR_INVALID_PARAMETERS
+		fi
+
+		bash "$COMMANDS_DIR/init.sh" "$@"
+		rc=$?
+		if [[ "$rc" == $NO_ERROR ]]; then
+			[[ "$workdir" == "" ]] && workdir="workdir_$board"
+			exportVars "$workdir"
+		else
+			exit $rc
+		fi
+
+		# check if kernel was updated
+		if [[ -f "$KERNEL_VERSION_FILE" ]]; then
+			local currKernVer=$(getKernelVersion)
+			local prevKernVer=$(<$KERNEL_VERSION_FILE)
+
+			if [[ "$currKernVer" != "$prevKernVer" ]]; then
+				bash "$COMMANDS_DIR/sync.sh" auto
+			elif [[ "$KERN_SRC_INSTALL_DIR" && \
+				   "$KERN_SRC_INSTALL_DIR" -nt "$KERNEL_VERSION_FILE" ]]; then
+				bash "$COMMANDS_DIR/sync.sh" auto
+			fi
+		else
+			getKernelVersion > "$KERNEL_VERSION_FILE"
+		fi
 	fi
 
+	[[ "$workdir" == "" ]] && workdir="$DEFAULT_WORKDIR"
 	exportVars "$workdir"
 	checkIfUpdated
 
@@ -133,6 +215,10 @@ main()
 						[ "$KERN_SRC_INSTALL_DIR" -ot "$KERNEL_VERSION_FILE" ] && \
 						bash "$COMMANDS_DIR/sync.sh" auto
 					fi
+
+					# cache the information about modified files
+					export CASHED_MODIFIED_FILES="$(modifiedFiles)"
+
 					bash "$COMMANDS_DIR/$opt.sh"
 					rc=$?
 				fi

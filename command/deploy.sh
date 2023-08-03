@@ -13,16 +13,22 @@ validateKernels()
 	   $localversion == *"$kernelversion"* ]] && return $NO_ERROR
 	logErr "The kernel on the device is outdated!"
 	logInfo "Kernel on the device: $kernelrelease $kernelversion"
-	logInfo "Kernel on the host:   $localrelease $localversion"
+	logInfo "Last build kernel:    $localrelease $localversion"
 	return $ERROR_INVALID_KERNEL_ON_DEVICE
 }
 
 main()
 {
 	if [ "$DEPLOY_TYPE" == "" ] || [ "$DEPLOY_PARAMS" == "" ]; then
-		logWarn "Please set the connection parameters to the target device"
+		logErr "Please specify SSH connection parameters to the target device using: --target=<user@host[:port]> parameter"
 		exit $ERROR_NO_DEPLOY_PARAMS
 	fi
+
+	if [ ! -f "deploy/$DEPLOY_TYPE.sh" ]; then
+		logErr "Unknown deploy type '$DEPLOY_TYPE'"
+		exit $ERROR_INVALID_DEPLOY_TYPE
+	fi
+
 	validateKernels
 	local rc=$?
 	if [[ "$KERN_SRC_INSTALL_DIR" && $rc != $NO_ERROR ]]; then
@@ -34,7 +40,7 @@ main()
 	rc=$?
 	[ $rc != $NO_ERROR ] && exit $rc
 
-	# find modules need to upload and unload
+	# find modules need to upload and and these for unload
 	local modulestoupload=()
 	local modulesontarget=()
 	local modulestounload=()

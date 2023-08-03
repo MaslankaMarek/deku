@@ -1,4 +1,4 @@
-# DEKU for ChromiumOS
+# # DExterous Kernel Update [DEKU] for ChromiumOS
 
 ## Table of Contents
 - [About the DEKU](#about)
@@ -11,48 +11,41 @@
 <a name="about"></a>
 ## About the DEKU for ChromiumOS
 Since DEKU includes integrations for the ChromiumOS SDK, it can be used in an easier way.
-For example, without performing synchronization on every kernel compilation.
+For example, without initializing and without performing synchronization on every kernel compilation.
 
 <a name="prerequisites"></a>
 ## Prerequisites
- - Build the kernel with: `USE="livepatch kernel_sources" emerge-${BOARD} chromeos-kernel-...`
+ - Build the kernel with:  
+ `USE="livepatch kernel_sources" emerge-${BOARD} chromeos-kernel-${KERNEL_VERSION}`
  - Flash the kernel to the device.
 
 <a name="init"></a>
-## Init DEKU
+## Download and build DEKU
 Download and build DEKU inside cros sdk environment
 ```bash
 git clone https://github.com/Semihalf/deku.git
 cd deku
 make
 ```
-Add DEKU to the `PATH` environment. Run the following command inside the `deku` dir
+Optionally, add DEKU to the `PATH` environment. Run the following command in the `deku` directory
 ```bash
 echo export PATH=\$PATH:`pwd` >> ~/.bashrc
 source ~/.bashrc
 ```
 
-Initialize DEKU for specific board
-```bash
-deku --board=<BOARD_NAME> -p root@<DUT_ADDRESS[:PORT]> init
-```
-Adjust:
-- `--board=<BOARD_NAME>` board name. The meaning of this parameter is the same as in the ChromiumOS SDK,
-- `-p root@<DUT_ADDRESS[:PORT]>` Chromebook address and optionally SSH port number.
-
-Example usage:
-`deku --board=brya -p root@192.168.0.100:22 init`
-
 <a name="usage"></a>
 ## Usage
-Use
+Use following command to apply changes to the kernel on the DUT.
 ```bash
-deku --board=<BOARD_NAME> deploy
+deku --board=<BOARD_NAME> --target=<DUT_ADDRESS[:PORT]> deploy
 ```
-to apply changes to the kernel on the DUT.
 
-Example usage:
-`deku --board=brya deploy`
+Adjust:
+- `--board=<BOARD_NAME>` board name. The meaning of this parameter is the same as in the ChromiumOS SDK,
+- `--target=<DUT_ADDRESS[:PORT]>` Chromebook address and optionally SSH port number.
+
+### Example use:  
+`deku --board=brya --target=192.168.0.100:22 deploy`
 
 ***
 [Read the rest of the README](README.md#rest_of_readme)
