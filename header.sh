@@ -38,8 +38,8 @@ export KERNEL_VERSION_FILE="$workdir/version"
 # commands script dir
 export COMMANDS_DIR=command
 
-# is inside chromeos sdk
-export CHROMEOS_CHROOT=0
+# kernel sources install dir
+export KERN_SRC_INSTALL_DIR=
 
 # log level filter
 export LOG_LEVEL=1 # 0 - debug, 1 - info, 2 - warning, 3 - error
@@ -75,3 +75,8 @@ export ERROR_UNSUPPORTED_CHANGES=28
 export ERROR_CHANGE_CALL_TO_ORIGIN=29
 export ERROR_UNSUPPORTED_READ_MOSTLY=30
 export ERROR_UNSUPPORTED_REF_SYM_FROM_MODULE=31
+export ERROR_NO_BOARD_PARAM=32
+export ERROR_INSUFFICIENT_BUILD_PARAMS=33
+export ERROR_INVALID_KERNEL_ON_DEVICE=34
+export ERROR_WORKDIR_EXISTS=35
+export ERROR_BOARD_NOT_EXISTS=36

@@ -21,11 +21,12 @@ isKernelSroucesDir()
 checkKernelBuildDir()
 {
 	local dir=$1
+	local workdir=$2
 
 	local usellvm=
 	isLLVMUsed "$dir" && usellvm=1
 
-	local tmpdir=$(mktemp -d init-XXX --tmpdir=$workdir)
+	local tmpdir=$(mktemp -d init-XXX --tmpdir="$workdir")
 	cat > "$tmpdir/test.c" <<- EOF
 	#include <linux/kernel.h>
 	#include <linux/module.h>
@@ -92,8 +93,9 @@ main()
 	local board=""
 	local prebuild=""
 	local postbuild=""
+	local kernsrcinstall=""
 
-	if ! options=$(getopt -u -o b:s:d:p:w: -l builddir:,sourcesdir:,deploytype:,deployparams:,prebuild:,postbuild:,board:,workdir: -- "$@")
+	if ! options=$(getopt -u -o b:s:d:p:w: -l builddir:,sourcesdir:,deploytype:,deployparams:,srcinstdir:,prebuild:,postbuild:,board:,workdir: -- "$@")
 	then
 		exit 1
 	fi
@@ -114,6 +116,7 @@ main()
 		-p|--deployparams) deployparams="$value" ; shift;;
 		-w|--workdir) workdir="$value" ; shift;;
 		--board) board="$value" ;;
+		--srcinstdir) kernsrcinstall="$value" ;;
 		--prebuild) prebuild="$value" ;;
 		--postbuild) postbuild="$value" ;;
 		(--) shift; break;;
@@ -126,7 +129,7 @@ main()
 	if [[ "$board" ]]; then
 		if [[ "$CHROMEOS_CHROOT" != 1 ]]; then
 			logInfo "--board parameter can be only used inside CrOS SDK"
-			exit 1
+			exit $ERROR_NO_BOARD_PARAM
 		fi
 		local kerndir=`find /build/$board/var/db/pkg/sys-kernel/ -type f -name "chromeos-kernel-*"`
 		kerndir=`basename $kerndir`
@@ -134,6 +137,17 @@ main()
 		[[ -z "$builddir" ]] && builddir="/build/$board/var/cache/portage/sys-kernel/$kerndir"
 		prebuild="bash integration/cros_prebuild.sh"
 		postbuild="bash integration/cros_postbuild.sh"
+		if [[ "$kernsrcinstall" == "" ]]; then
+			kernsrcinstall=`find /build/$board/usr/src/ -maxdepth 1 -type d \
+								 -name "chromeos-kernel-*"`
+		fi
+		if [[ "$kernsrcinstall" == "" ]]; then
+			logErr "Your kernel must be build with: USE=\"livepatch kernel_sources\" emerge-$board chromeos-kernel-..."
+			exit $ERROR_INSUFFICIENT_BUILD_PARAMS
+		fi
+		[[ "$workdir" == "" ]] && workdir="workdir_$board"
+		CONFIG_FILE="$workdir/config"
+		deploytype="ssh"
 	fi
 
 	builddir=${builddir%/}
@@ -141,38 +155,42 @@ main()
 	local linuxheaders="$builddir"
 
 	if [[ -z "$builddir" ]]; then
-		if [[ "$CHROMEOS_CHROOT" != 1 ]]; then
-			logErr "Please specify the kernel build directory using -b <PATH_TO_KERNEL_BUILD_DIR> syntax"
+		if [[ "$CHROMEOS_CHROOT" == 1 ]]; then
+			logErr "Please specify the Chromebook board name using: $0 --board=<BOARD_NAME> ... syntax"
 		else
-			logErr "Please specify the ChromeOS board name using --board=<BOARD_NAME> syntax"
+			logErr "Please specify the kernel build directory using -b <PATH_TO_KERNEL_BUILD_DIR> syntax"
 		fi
 		exit 2
 	fi
 
 	[ -L "$builddir/source" ] && sourcesdir="$builddir/source"
-	echo "Check for kernel sources in: $sourcesdir"
+	logDebug "Check for kernel sources in: $sourcesdir"
 	isKernelSroucesDir $sourcesdir || sourcesdir="$builddir"
 
 	sourcesdir=${sourcesdir%/}
 
 	[ "$(git --version)" ] || { logErr "\"git\" could not be found. Please install \"git\""; exit 2; }
 
-	echo "Initialize DEKU"
-	echo "Sources dir: $sourcesdir"
-	echo "Build dir: $builddir"
-	echo "Work dir: $workdir"
+	logInfo "Initialize DEKU"
+	logInfo "Sources dir: $sourcesdir"
+	logInfo "Build dir: $builddir"
+	logInfo "Work dir: $workdir"
 
 	if [ -d "$workdir" ]
 	then
-		[ "$(ls -A $workdir)" ] && { logErr "Directory \"$workdir\" is not empty"; exit ENOTEMPTY; }
+		[ "$(ls -A $workdir)" ] && { logErr "Directory \"$workdir\" is not empty"; exit $ERROR_WORKDIR_EXISTS; }
 	else
-		mkdir -p "$workdir"
+		mkdir -p "$workdir" || { logErr "Failed to create directory \"$workdir\""; exit $?; }
 	fi
 
-	checkKernelBuildDir $builddir
+	checkKernelBuildDir "$builddir" "$workdir"
 	local rc=$?
 	if [[ $rc != $NO_ERROR ]]; then
 		if [[ $rc == $ERROR_KLP_IS_NOT_ENABLED ]]; then
+			if [[ "$CHROMEOS_CHROOT" == 1 ]]; then
+				logErr "Your kernel must be build with: USE=\"livepatch kernel_sources\" emerge-$board chromeos-kernel-..."
+				exit $ERROR_INSUFFICIENT_BUILD_PARAMS
+			fi
 			logErr "Kernel livepatching is not enabled. Please enable CONFIG_LIVEPATCH flag and rebuild the kernel"
 			echo "Would you like to try enable this flag now? [y/n]"
 			while true; do
@@ -218,9 +236,14 @@ main()
 	[[ "$prebuild" != "" ]] && echo "PRE_BUILD=\"$prebuild\"" >> $CONFIG_FILE
 	[[ "$postbuild" != "" ]] && echo "POST_BUILD=\"$postbuild\"" >> $CONFIG_FILE
 	[[ "$board" != "" ]] && echo "CROS_BOARD=\"$board\"" >> $CONFIG_FILE
+	[[ "$kernsrcinstall" != "" ]] && echo "KERN_SRC_INSTALL_DIR=\"$kernsrcinstall\"" >> $CONFIG_FILE
 	isLLVMUsed "$linuxheaders" && echo "USE_LLVM=\"LLVM=1\"" >> $CONFIG_FILE
 	echo "WORKDIR_HASH=$(generateDEKUHash)" >> $CONFIG_FILE
-	git --work-tree="$sourcesdir" --git-dir="$workdir/.git" -c init.defaultBranch=deku init > /dev/null
+
+	if [[ "$kernsrcinstall" == "" ]]; then
+		git --work-tree="$sourcesdir" --git-dir="$workdir/.git" \
+			-c init.defaultBranch=deku init > /dev/null
+	fi
 
 	mkdir -p "$SYMBOLS_DIR"
 }

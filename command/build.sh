@@ -26,7 +26,7 @@ main()
 		[[ ! " ${validmodules[*]} " =~ "$module" ]] && rm -rf "$moduledir"
 	done <<< "$modules"
 
-	echo "Build DEKU module"
+	logDebug "Build DEKU module"
 
 	bash generate_hotreload.sh
 	return $?

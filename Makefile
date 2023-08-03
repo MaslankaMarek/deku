@@ -11,25 +11,31 @@ ifdef workdir
 	WORKDIR=-w $(workdir)
 endif
 
-ELFUTILS_FLAGS= -Werror -Wall -Wpedantic -Wextra -lelf
+CC ?= gcc
+CFLAG ?= -Werror -Wall -Wpedantic -Wextra -Wno-gnu-zero-variadic-macro-arguments
+
+ELFUTILS_FLAGS= $(CFLAG) -lelf
 ifdef SUPPORT_DISASSEMBLY
 	ELFUTILS_FLAGS=-DSUPPORT_DISASSEMBLY -lopcodes
 endif
 
 mklivepatch: mklivepatch.c
-	gcc mklivepatch.c -Werror -Wall -Wpedantic -Wextra -lelf -o mklivepatch
+	$(CC) mklivepatch.c $(CFLAG) -lelf -o $@
 
 elfutils: elfutils.c
-	gcc elfutils.c $(ELFUTILS_FLAGS) -o elfutils
+	$(CC) elfutils.c $(ELFUTILS_FLAGS) -o $@
 
 clean:
 	rm -f mklivepatch elfutils
 
 deploy:
+	$(warning Using DEKU with "make deploy" is deprecated and will be removed soon. Instead, use the "./deku deploy" command.)
 	./deku $(WORKDIR) deploy
 
 build:
+	$(warning Using DEKU with "make build" is deprecated and will be removed soon. Instead, use the "./deku build" command.)
 	./deku $(WORKDIR) build
 
 sync:
+	$(warning Using DEKU with "make sync" is deprecated and will be removed soon. Instead, use the "./deku sync" command.)
 	./deku $(WORKDIR) sync

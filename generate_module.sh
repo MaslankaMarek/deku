@@ -7,11 +7,25 @@
 
 RUN_POST_BUILD=0
 
+getFileDiff()
+{
+	local file=$1
+	if [ "$KERN_SRC_INSTALL_DIR" ]; then
+		echo diff --unified "$SOURCE_DIR/$file" --label "$SOURCE_DIR/$file" \
+			 "$KERN_SRC_INSTALL_DIR/$file" --label "$KERN_SRC_INSTALL_DIR/$file"
+		diff --unified "$SOURCE_DIR/$file" --label "$SOURCE_DIR/$file" \
+			 "$KERN_SRC_INSTALL_DIR/$file" --label "$KERN_SRC_INSTALL_DIR/$file"
+	else
+		git -C "$workdir" diff --function-context -- $file
+	fi
+}
+
 generateModuleId()
 {
 	local file=$1
-	local deku_module_id=`git -C "$workdir" diff -W -- $file | cksum | cut -d' ' -f1`
-	printf "0x%08x" $deku_module_id
+	local diff=$(getFileDiff $file)
+	local sum=`cat <(echo "$diff") | cksum | cut -d' ' -f1`
+	printf "0x%08x" $sum
 }
 
 generateMakefile()
@@ -465,10 +479,15 @@ main()
 		mkdir $moduledir
 
 		# write diff to file for debug purpose
-		git -C $workdir diff -- $file > "$moduledir/diff"
+		getFileDiff $file > "$moduledir/diff"
 
 		# file name with prefix '_' is the origin file
-		git -C $workdir cat-file blob ":$file" > "$moduledir/_$basename"
+		if [ "$KERN_SRC_INSTALL_DIR" ]; then
+			cp "$KERN_SRC_INSTALL_DIR/$file" "$moduledir/_$basename"
+		else
+			git -C $workdir cat-file blob ":$file" > "$moduledir/_$basename"
+		fi
+
 		cp "$SOURCE_DIR/$file" "$moduledir/$basename"
 		echo -n "$file" > "$moduledir/$FILE_SRC_PATH"
 

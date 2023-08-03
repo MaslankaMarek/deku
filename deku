@@ -5,6 +5,10 @@
 #
 # Main file for DEKU
 
+MAIN_PATH=`realpath "$0"`
+MAIN_PATH=`dirname "$MAIN_PATH"`
+cd "$MAIN_PATH"
+
 . ./header.sh
 . ./common.sh
 
@@ -43,8 +47,6 @@ exportVars()
 {
 	export workdir="$1"
 	. ./header.sh
-	# detect whether we're inside a chromeos chroot
-	[[ -e /etc/cros_chroot_version ]] && export CHROMEOS_CHROOT=1
 
 	[[ ! -f "$CONFIG_FILE" ]] && return
 	while read -r line; do
@@ -79,6 +81,15 @@ main()
 			break
 		fi
 	done
+
+	# detect whether we're inside a chromeos chroot
+	if [[ -e /etc/cros_chroot_version ]]; then
+		. ./integration/cros_prepare.sh "$@"
+		local rc=$?
+		[[ $rc != 0 ]] && exit $rc
+		[[ "$CROS_WORKDIR" ]] && workdir="$CROS_WORKDIR"
+	fi
+
 	exportVars "$workdir"
 	checkIfUpdated
 
@@ -96,7 +107,8 @@ main()
 				bash "$COMMANDS_DIR/$opt.sh" "$@"
 				rc=$?
 				if [[ "$rc" == $NO_ERROR ]]; then
-					bash ${0} -w "$workdir" sync
+					exportVars "$workdir"
+					bash "$COMMANDS_DIR/sync.sh" auto
 					rc=$?
 					if [[ "$rc" == $NO_ERROR ]]; then
 						logInfo "Init done"
@@ -107,7 +119,20 @@ main()
 					logInfo "Can't find $workdir directory"
 					logInfo "The project probably has not been initiated"
 					rc=$ERROR_NO_WORKDIR
+				elif [[ "$KERN_SRC_INSTALL_DIR" && ! -d "$KERN_SRC_INSTALL_DIR" ]]; then
+					if [[ "$CHROMEOS_CHROOT" == 1 ]]; then
+						logErr "ERROR: Your kernel must be build with: USE=\"livepatch kernel_sources\" emerge-$board chromeos-kernel-..."
+					else
+						logErr "Can't find installation dir with kernel sources ("$KERN_SRC_INSTALL_DIR")."
+						logErr "You must undo any changes made after the kernel was built and install kernel sources."
+					fi
+					exit $ERROR_INSUFFICIENT_BUILD_PARAMS
 				else
+					if [[ "$KERN_SRC_INSTALL_DIR" ]]; then
+						[ "$KERN_SRC_INSTALL_DIR" -nt "$KERNEL_VERSION_FILE" ] || \
+						[ "$KERN_SRC_INSTALL_DIR" -ot "$KERNEL_VERSION_FILE" ] && \
+						bash "$COMMANDS_DIR/sync.sh" auto
+					fi
 					bash "$COMMANDS_DIR/$opt.sh"
 					rc=$?
 				fi

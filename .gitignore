@@ -1,6 +1,5 @@
 .vscode/
-workdir
-workdir_test
+workdir_*
 mklivepatch
 elfutils
 test/rootfs.img

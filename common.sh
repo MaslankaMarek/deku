@@ -97,20 +97,36 @@ export -f findObjWithSymbol
 
 getKernelVersion()
 {
-	sed -n "s/.*UTS_VERSION\ \"\(.\+\)\"$/\1/p" "$LINUX_HEADERS/include/generated/compile.h"
+	grep -r UTS_VERSION "$LINUX_HEADERS/include/generated/" | \
+	sed -n "s/.*UTS_VERSION\ \"\(.\+\)\"$/\1/p"
+
 }
 export -f getKernelVersion
 
 getKernelReleaseVersion()
 {
-	sed -n "s/.*UTS_RELEASE\ \"\(.\+\)\"$/\1/p" "$LINUX_HEADERS/include/generated/utsrelease.h"
+	grep -r UTS_RELEASE "$LINUX_HEADERS/include/generated/" | \
+	sed -n "s/.*UTS_RELEASE\ \"\(.\+\)\"$/\1/p"
 }
 export -f getKernelReleaseVersion
 
 # find modified files
 modifiedFiles()
 {
-	git -C "$workdir" diff --name-only | grep -E ".+\.[ch]$"
+	if [ ! "$KERN_SRC_INSTALL_DIR" ]; then
+		git -C "$workdir" diff --name-only | grep -E ".+\.[ch]$"
+		return
+	fi
+
+	cd "$SOURCE_DIR/"
+	local files=`find . -type f -name "*.c" -o -name "*.h"`
+	cd $OLDPWD
+	while read -r file; do
+		if [ "$SOURCE_DIR/$file" -nt "$KERN_SRC_INSTALL_DIR/$file" ]; then
+			cmp --silent "$SOURCE_DIR/$file" "$KERN_SRC_INSTALL_DIR/$file" || \
+			echo "${file:2}"
+		fi
+	done <<< "$files"
 }
 export -f modifiedFiles
 

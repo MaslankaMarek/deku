@@ -9,14 +9,12 @@ validateKernels()
 	local kernelversion=`bash deploy/$DEPLOY_TYPE.sh --kernel-version`
 	local localrelease=$(getKernelReleaseVersion)
 	local localversion=$(getKernelVersion)
-	local mismatch=""
-	[[ $localrelease != *"$kernelrelease"* ]] && mismatch=" release:$kernelrelease"
-	[[ $localversion != *"$kernelversion"* ]] && mismatch+=" version:$kernelversion"
-	[[ $mismatch == "" ]] && return 0
-	logErr "Kernel image mismatch:$mismatch."
+	[[ $localrelease == *"$kernelrelease"* && \
+	   $localversion == *"$kernelversion"* ]] && return $NO_ERROR
+	logErr "The kernel on the device is outdated!"
 	logInfo "Kernel on the device: $kernelrelease $kernelversion"
-	logInfo "Kernel on the host: $localrelease $localversion"
-	return 1
+	logInfo "Kernel on the host:   $localrelease $localversion"
+	return $ERROR_INVALID_KERNEL_ON_DEVICE
 }
 
 main()
@@ -26,9 +24,14 @@ main()
 		exit $ERROR_NO_DEPLOY_PARAMS
 	fi
 	validateKernels
+	local rc=$?
+	if [[ "$KERN_SRC_INSTALL_DIR" && $rc != $NO_ERROR ]]; then
+		logWarn "Please install the current built kernel on the device"
+		exit $rc
+	fi
 
 	bash $COMMANDS_DIR/build.sh
-	local rc=$?
+	rc=$?
 	[ $rc != $NO_ERROR ] && exit $rc
 
 	# find modules need to upload and unload
@@ -57,7 +60,7 @@ main()
 	done
 
 	if ((${#modulestoupload[@]} == 0)) && ((${#modulestounload[@]} == 0)); then
-		echo "No modules need to upload"
+		logDebug "No modules need to upload"
 		return $NO_ERROR
 	fi
 

@@ -130,7 +130,7 @@ main()
 
 	modules=$(findModifiedModules "$prevmod")
 	if [ -z "$modules" ]; then
-		logInfo "No changes detected since last run"
+		logInfo "No valid changes detected since last run"
 		exit $NO_ERROR
 	fi
 
