@@ -1,41 +1,44 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright (C) Semihalf, 2022
-# Author: Marek Maślanka <mm@semihalf.com>
+# Author: Marek Maślanka
+# Project: DEKU
+# URL: https://github.com/MarekMaslanka/deku
 
-.PHONY: deploy
+all: mklivepatch.o mklivepatch elfutils.o elfutils symbolindex deku
 
-all: mklivepatch elfutils
-
-WORKDIR=
-ifdef workdir
-	WORKDIR=-w $(workdir)
+C_DEBUG_FLAG=
+GO_DEBUG_FLAG=
+ifdef debug
+	C_DEBUG_FLAG=-g
+	GO_DEBUG_FLAG=-gcflags=all="-N -l"
 endif
 
 CC ?= gcc
-CFLAG ?= -Werror -Wall -Wpedantic -Wextra -Wno-gnu-zero-variadic-macro-arguments
+CFLAG ?= -Wno-gnu-zero-variadic-macro-arguments
+CFLAG := $(C_DEBUG_FLAG)
 
 ELFUTILS_FLAGS= $(CFLAG) -lelf
-ifdef SUPPORT_DISASSEMBLY
-	ELFUTILS_FLAGS=-DSUPPORT_DISASSEMBLY -lopcodes
-endif
 
-mklivepatch: mklivepatch.c
-	$(CC) mklivepatch.c $(CFLAG) -lelf -o $@
+mklivepatch.o: src/mklivepatch.c
+	$(CC) $< -c -DUSE_AS_LIB $(CFLAG) -lelf -o $@
 
-elfutils: elfutils.c
-	$(CC) elfutils.c $(ELFUTILS_FLAGS) -o $@
+mklivepatch: src/mklivepatch.c
+	$(CC) $< $(CFLAG) -lelf -o $@
+
+elfutils.o: src/libelfutils.c
+	$(shell echo "void t() { init_disassemble_info(NULL, 0, NULL); }" | \
+			$(CC) -DPACKAGE=1 -include dis-asm.h -S -o - -x c - > /dev/null 2>&1)
+	$(CC) $< $(ELFUTILS_FLAGS) -c -DUSE_AS_LIB -DDISASSEMBLY_STYLE_SUPPORT=$(.SHELLSTATUS) -o $@
+
+elfutils: src/elfutils.c
+	$(shell echo "void t() { init_disassemble_info(NULL, 0, NULL); }" | \
+			$(CC) -DPACKAGE=1 -include dis-asm.h -S -o - -x c - > /dev/null 2>&1)
+	$(CC) $< elfutils.o -lopcodes -lbfd -lz -liberty $(ELFUTILS_FLAGS) -DDISASSEMBLY_STYLE_SUPPORT=$(.SHELLSTATUS) -o $@
+
+symbolindex: src/symbolindex.c
+	$(CC) $< $(CFLAG) -Wno-unused-function -lelf -o $@
+
+deku:
+	go clean -cache
+	go build $(GO_DEBUG_FLAG) -o $@ src/go/*.go
 
 clean:
-	rm -f mklivepatch elfutils
-
-deploy:
-	$(warning Using DEKU with "make deploy" is deprecated and will be removed soon. Instead, use the "./deku deploy" command.)
-	./deku $(WORKDIR) deploy
-
-build:
-	$(warning Using DEKU with "make build" is deprecated and will be removed soon. Instead, use the "./deku build" command.)
-	./deku $(WORKDIR) build
-
-sync:
-	$(warning Using DEKU with "make sync" is deprecated and will be removed soon. Instead, use the "./deku sync" command.)
-	./deku $(WORKDIR) sync
+	rm -f mklivepatch.o mklivepatch elfutils.o elfutils symbolindex deku

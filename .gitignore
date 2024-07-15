@@ -2,5 +2,10 @@
 workdir_*
 mklivepatch
 elfutils
+symbolindex
+deku
 test/rootfs.img
 test/testing_rsa
+mklivepatch.o
+elfutils.o
+libelfutils.a

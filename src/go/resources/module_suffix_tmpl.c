@@ -1,8 +1,8 @@
-/* SPDX-License-Identifier: Apache-2.0 */
 /*
- * Copyright (C) Semihalf, 2022
- * Author: Marek Maślanka <mm@semihalf.com>
- */
+* Author: Marek Maślanka
+* Project: DEKU
+* URL: https://github.com/MarekMaslanka/deku
+*/
 
 static int deku_init(void)
 {

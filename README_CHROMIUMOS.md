@@ -3,7 +3,7 @@
 ## Table of Contents
 - [About the DEKU](#about)
 - [Prerequisites](#prerequisites)
-- [Init deku](#init)
+- [Download & build](#download)
 - [Usage](#usage)
 
 ---
@@ -15,16 +15,16 @@ For example, without initializing and without performing synchronization on ever
 
 <a name="prerequisites"></a>
 ## Prerequisites
- - Build the kernel with:  
- `USE="livepatch kernel_sources" emerge-${BOARD} chromeos-kernel-${KERNEL_VERSION}`
+ - Build the kernel with: `USE="livepatch kernel_sources" emerge-${BOARD} chromeos-kernel-${KERNEL_VERSION}`
  - Flash the kernel to the device.
 
-<a name="init"></a>
+<a name="download"></a>
 ## Download and build DEKU
 Download and build DEKU inside cros sdk environment
 ```bash
-git clone https://github.com/Semihalf/deku.git
+git clone https://github.com/MaslankaMarek/deku.git
 cd deku
+git checkout experimental
 make
 ```
 Optionally, add DEKU to the `PATH` environment. Run the following command in the `deku` directory
@@ -44,7 +44,7 @@ Adjust:
 - `--board=<BOARD_NAME>` board name. The meaning of this parameter is the same as in the ChromiumOS SDK,
 - `--target=<DUT_ADDRESS[:PORT]>` Chromebook address and optionally SSH port number.
 
-### Example use:  
+### Example use:
 `deku --board=brya --target=192.168.0.100:22 deploy`
 
 ***
